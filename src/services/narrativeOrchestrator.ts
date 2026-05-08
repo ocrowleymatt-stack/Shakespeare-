@@ -98,7 +98,19 @@ export async function runNarrativeQualityCycle(args: any): Promise<NarrativeCycl
   const chapters = args.chapters || [];
   updateNarrativeRuntimeMemory({ project: args.project, chapters, characters: args.characters || [] });
 
-  let draft = await AIService.writeDraft(...arguments as any);
+  let draft = await AIService.writeDraft(
+    args.title,
+    args.summary,
+    args.context || '',
+    args.project?.type || 'novel',
+    args.activeNodes || [],
+    args.research || [],
+    args.project?.maturity || 'standard',
+    args.project?.sourceMaterials || [],
+    args.directives || [],
+    args.project?.targetWords,
+    args.project?.externalReviews || []
+  );
 
   let structural = evaluateStructuralProgression({
     chapterTitle: args.title,

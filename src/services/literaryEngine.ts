@@ -49,7 +49,7 @@ function firstNonEmptyLine(text = ''): string {
 
 function extractCandidateMotifs(text = ''): string[] {
   const stop = new Set(['the','and','that','with','this','from','were','there','their','have','what','when','where','because','into','onto','about','would','could','should','said','then','than','been','being','they','them','your','you','his','her','she','him','for','not','but','had','was','are','all','one','out','our','who','why','how']);
-  const words = text.toLowerCase().match(/\b[a-z][a-z'-]{4,}\b/g) || [];
+  const words: string[] = text.toLowerCase().match(/\b[a-z][a-z'-]{4,}\b/g) || [];
   const counts = new Map<string, number>();
   words.forEach(word => {
     const clean = word.replace(/'s$/, '');
