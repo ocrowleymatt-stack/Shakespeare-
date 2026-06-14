@@ -256,7 +256,7 @@ app.get("/api/health", (req, res) => {
 
 // API endpoint for AI queries
 app.post("/api/ai/call", async (req, res) => {
-  const { prompt, model = "gemini-3.5-flash", json = false, schema, maxTokens, providerOverride, useSearch, primaryProvider = "grok" } = req.body;
+  const { prompt, model = "gemini-3.5-flash", json = false, schema, maxTokens, providerOverride, useSearch, useWebSearch, primaryProvider = "grok" } = req.body;
 
   // Let's analyze sensitivity check on the server
   const isSensitive = /chem\s*sex|chemsex|slamming|crystal\s*meth|methamphetamine|gbl|ghb|tina|harm\s*reduction|overdose|substance|drug|rehab|addiction|recovery\s*guide|survival\s*guide|unfiltered|explicit/i.test(prompt);
@@ -291,7 +291,7 @@ app.post("/api/ai/call", async (req, res) => {
 
       switch (provider) {
         case 'gemini':
-          result = await callGeminiOnServer({ prompt, model, json, maxTokens, useSearch });
+          result = await callGeminiOnServer({ prompt, model, json, maxTokens, useSearch: Boolean(useSearch || useWebSearch) });
           break;
         case 'claude':
           result = await callClaude(prompt, json);

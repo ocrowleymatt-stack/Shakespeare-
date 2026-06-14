@@ -6,11 +6,6 @@
 import { Type } from "@google/genai";
 import { IntelligenceProvider, Project, Character, PlotNode, ResearchNote, Chapter, Critique, ProjectType, PrizeAssessment, ExternalReview, SourceMaterial } from "../types";
 
-const GEMINI_API_KEY = (import.meta as any).env?.VITE_GEMINI_API_KEY as string | undefined;
-const XAI_API_KEY = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env.VITE_GROK_API_KEY : undefined;
-const CLAUDE_API_KEY = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env.VITE_ANTHROPIC_API_KEY : undefined;
-const OPENAI_API_KEY = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env.VITE_OPENAI_API_KEY : undefined;
-
 let globalPrimaryProvider: IntelligenceProvider = 'grok';
 
 function safeParseJSON(text: string, fallback: any = {}) {
