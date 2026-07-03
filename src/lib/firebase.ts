@@ -1,155 +1,30 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, signInWithRedirect, getRedirectResult, signInAnonymously } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer, setDoc, getDoc } from 'firebase/firestore';
-import { handleFirestoreError, OperationType } from './firestoreUtils';
-import firebaseConfig from '../../firebase-applet-config.json';
+/**
+ * Firebase STUB — preview/offline mode
+ * All Firebase calls are replaced with no-ops; data persists in localStorage via App.tsx.
+ */
 
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
-export const auth = getAuth(app);
-
-// FORCED FIX: Explicitly nullify tenantId to escape the invalid-tenant-id error loop
-// Some SDK versions or environments might persist this or pick it up from env vars automatically.
-if ((auth as any).tenantId) {
-  console.log(`Clearing existing tenant ID: ${(auth as any).tenantId}`);
-  (auth as any).tenantId = null;
-} else {
-  console.log('Initial auth.tenantId is null/undefined as expected.');
-}
-
-// Support for multi-tenancy - DISABLED COMPLETELY to fix auth/invalid-tenant-id
-// const tenantId = (import.meta as any).env.VITE_FIREBASE_TENANT_ID;
-// if (tenantId && tenantId !== 'undefined' && tenantId !== 'null' && typeof tenantId === 'string' && tenantId.trim() !== '') {
-//   auth.tenantId = tenantId.trim();
-//   console.log(`Firebase Tenant ID set to: ${tenantId}`);
-// }
-
-export const googleProvider = new GoogleAuthProvider();
-googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
-
-// In-memory access token cache for Google APIs as required by Workspace Integration skill
-let cachedAccessToken: string | null = null;
-
-export const setCachedAccessToken = (token: string | null) => {
-  cachedAccessToken = token;
-  if (token) {
-    localStorage.setItem('ls_gdrive_connected', 'true');
-  } else {
-    localStorage.removeItem('ls_gdrive_connected');
-  }
+// Fake auth user
+const DEMO_USER: any = {
+  uid: 'demo-user',
+  displayName: 'Demo Author',
+  email: 'demo@novelwrite.local',
+  photoURL: null,
 };
 
-export const getCachedAccessToken = (): string | null => {
-  return cachedAccessToken;
-};
+export const auth: any = { currentUser: DEMO_USER };
+export const db: any = {};
+export const googleProvider: any = {};
 
-// Connection test as required by instructions
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log('Firebase connection (Firestore) validated.');
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('permission-denied')) {
-      console.log('Firebase connectivity verified (Permission Denied as expected).');
-    } else if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration: client is offline.");
-    }
-  }
+export function onAuthStateChanged(_auth: any, callback: (user: any) => void) {
+  setTimeout(() => callback(DEMO_USER), 0);
+  return () => {};
 }
 
-testConnection();
+export async function loginWithGoogle() { return DEMO_USER; }
+export async function handleRedirectLogin() { return null; }
+export async function logout() {}
+export async function loginAnonymously() { return DEMO_USER; }
 
-export async function loginWithGoogle() {
-  console.log('Attempting Google Login... Auth Tenant ID:', (auth as any).tenantId);
-  try {
-    if ((auth as any).tenantId) {
-      (auth as any).tenantId = null;
-    }
-    
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      if (credential?.accessToken) {
-        setCachedAccessToken(credential.accessToken);
-        console.log('Access token successfully retrieved and cached from popup.');
-      }
-      return await handleUserSync(result.user);
-    } catch (popupError: any) {
-      if (popupError.code === 'auth/popup-blocked' || popupError.code === 'auth/cancelled-interactive-request') {
-        console.log('Popup blocked or cancelled, falling back to redirect...');
-        await signInWithRedirect(auth, googleProvider);
-        return null;
-      }
-      throw popupError;
-    }
-  } catch (error) {
-    console.error('Sign in error:', error);
-    throw error;
-  }
-}
-
-export async function handleRedirectLogin() {
-  try {
-    const result = await getRedirectResult(auth);
-    if (result) {
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      if (credential?.accessToken) {
-        setCachedAccessToken(credential.accessToken);
-        console.log('Access token successfully retrieved and cached from redirect result.');
-      }
-      return await handleUserSync(result.user);
-    }
-    return null;
-  } catch (error) {
-    console.error('Redirect result error:', error);
-    throw error;
-  }
-}
-
-async function handleUserSync(user: any) {
-  if (user) {
-    const userRef = doc(db, 'users', user.uid);
-    let userSnap;
-    try {
-      userSnap = await getDoc(userRef);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
-      throw error;
-    }
-    
-    const userData = {
-      email: user.email || '',
-      displayName: user.displayName || '',
-      photoURL: user.photoURL || '',
-      lastLoginAt: Date.now()
-    };
-    
-    try {
-      if (!userSnap || !userSnap.exists()) {
-        await setDoc(userRef, {
-          ...userData,
-          createdAt: Date.now()
-        });
-      } else {
-        await setDoc(userRef, userData, { merge: true });
-      }
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
-    }
-  }
-  return user;
-}
-
-export async function logout() {
-  await signOut(auth);
-}
-
-export async function loginAnonymously() {
-  try {
-    const result = await signInAnonymously(auth);
-    return result.user;
-  } catch (error) {
-    console.error('Anonymous sign in error:', error);
-    throw error;
-  }
-}
+let _token: string | null = null;
+export function setCachedAccessToken(t: string | null) { _token = t; }
+export function getCachedAccessToken(): string | null { return _token; }

@@ -3,39 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
-import { 
-  Users, 
-  GitBranch, 
-  PenTool, 
-  Sparkles, 
-  BookOpen, 
-  Layers, 
-  Save, 
-  Trash2, 
-  Target, 
-  Activity, 
-  Compass, 
-  AlertTriangle,
-  Lightbulb, 
-  Eye, 
-  ShieldAlert,
-  ArrowRight,
-  ClipboardList,
-  Sparkle,
-  BrainCircuit
-} from 'lucide-react';
-import { Project, ViewType, ProjectType, Chapter, Character, PlotNode } from '../types';
+import { useState, useEffect, useRef } from 'react';
+import { Users, GitBranch, PenTool, Sparkles, FileText, BookOpen, Book, Layers, Save, Trash2, Trophy, Target, Plus, ChevronDown, Activity } from 'lucide-react';
+import { Project, Chapter, ViewType, ProjectType, MaturityLevel } from '../types';
+import DraftStagePanel from './DraftStagePanel';
 import { motion, AnimatePresence } from 'motion/react';
-import { PROJECT_TYPES, GENRES, TONES } from '../constants';
+import { PROJECT_TYPES, MATURITY_LEVELS, GENRES, TONES } from '../constants';
 
 interface Props {
   project: Project;
   projects: Project[];
   chapters: Chapter[];
-  characters: Character[];
-  plotNodes: PlotNode[];
-  isMobile: boolean;
   selectProject: (project: Project) => void;
   createNewProject: (title?: string) => void;
   updateProject: (updates: Partial<Project>) => void;
@@ -47,483 +25,318 @@ interface Props {
 
 export default function Dashboard({ 
   project, 
+  projects, 
   chapters,
-  characters,
-  plotNodes,
-  isMobile,
+  selectProject, 
+  createNewProject, 
   updateProject, 
   setView, 
   deleteProject, 
   saveToCloud, 
   isSaving 
 }: Props) {
+  const [localPremise, setLocalPremise] = useState(project.premise);
   const [localTitle, setLocalTitle] = useState(project.title);
-  const [isAuditing, setIsAuditing] = useState(false);
-  const [auditProgress, setAuditProgress] = useState(0);
-  const [auditComplete, setAuditComplete] = useState(false);
+  const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
+
+  const updateProjectRef = useRef(updateProject);
+  useEffect(() => {
+    updateProjectRef.current = updateProject;
+  }, [updateProject]);
 
   useEffect(() => {
     setLocalTitle(project.title);
+    setLocalPremise(project.premise);
   }, [project.id]);
+
+  // Debounced update for premise
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localPremise !== project.premise) {
+        updateProjectRef.current({ premise: localPremise });
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [localPremise, project.premise]);
 
   // Debounced update for title
   useEffect(() => {
     const timer = setTimeout(() => {
       if (localTitle !== project.title) {
-        updateProject({ title: localTitle });
+        updateProjectRef.current({ title: localTitle });
       }
     }, 500);
     return () => clearTimeout(timer);
   }, [localTitle, project.title]);
 
-  // Dynamic calculations for Project Health
-  const calculateProjectHealth = () => {
-    let score = 75; // base
-    
-    // Add parameters based on level of completion
-    if (project.premise) score += 5;
-    if (characters.length >= 3) score += 5;
-    
-    // Check characters have goals/fears
-    const completeChars = characters.filter(c => c.goals?.length && c.fears?.length).length;
-    if (characters.length > 0 && completeChars === characters.length) score += 5;
-    
-    // Active plot node beats
-    if (plotNodes.length >= 5) score += 5;
-    
-    // Chapters drafted
-    if (chapters.length > 0) score += 5;
-    
-    // Target word count alignment
-    if (project.targetWordCount && project.stats?.totalWords) {
-      const ratio = project.stats.totalWords / project.targetWordCount;
-      if (ratio > 0.1 && ratio < 1.1) score += 5;
-    }
-
-    return Math.min(100, score);
-  };
-
-  const healthScore = calculateProjectHealth();
-
-  // Run audit animation
-  const runLatticeAudit = () => {
-    setIsAuditing(true);
-    setAuditComplete(false);
-    setAuditProgress(0);
-    
-    const interval = setInterval(() => {
-      setAuditProgress(p => {
-        if (p >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            setIsAuditing(false);
-            setAuditComplete(true);
-          }, 600);
-          return 100;
-        }
-        return p + 10;
-      });
-    }, 150);
-  };
-
-  // Pre-configured intelligent suggestions
-  const recommendations = [
-    {
-      id: 'antagonist',
-      title: 'Define Antagonist Motivation',
-      desc: 'The antagonist lacks an explicit fear or immediate desire in the Design matrix. Align motivation to intensify narrative tension.',
-      type: 'motivation',
-      severity: 'high',
-      targetView: 'design' as ViewType,
-      subTab: 'characters'
+  const stats = [
+    { label: 'Personnel Profiles', value: project.characters?.length || 0, icon: Users, color: 'text-brand-primary', bgColor: 'bg-brand-primary/10', view: 'characters' },
+    { label: 'Narrative Vectors', value: project.plotNodes?.length || 0, icon: GitBranch, color: 'text-brand-primary', bgColor: 'bg-brand-primary/10', view: 'plot' },
+    { label: 'Coded Segments', value: project.chapters?.length || 0, icon: Book, color: 'text-brand-primary', bgColor: 'bg-brand-primary/10', view: 'writing' },
+    { 
+      label: project.targetWordCount ? `${Math.round(((project.stats?.totalWords || 0) / project.targetWordCount) * 100)}% Synchronized` : 'Target Offline', 
+      value: project.stats?.totalWords || 0, 
+      icon: Target, 
+      color: 'text-brand-primary', 
+      bgColor: 'bg-brand-primary/10', 
+      view: 'writing' 
     },
-    {
-      id: 'conflict_france',
-      title: 'Resolve Factual Contradiction',
-      desc: 'Arthur describes his year living in Paris in Chapter 4, but details in Chapter 17 assert he has never visited France.',
-      type: 'continuity',
-      severity: 'critical',
-      targetView: 'intelligence' as ViewType,
-      subTab: 'continuity'
-    },
-    {
-      id: 'revisit_mystery',
-      title: 'Revisit Dormant Promise Ledger',
-      desc: 'The "unopened brass letter casket" introduced in Chapter 2 has not been referenced since. Expectation risk elevated.',
-      type: 'mystery',
-      severity: 'medium',
-      targetView: 'memory' as ViewType,
-      subTab: 'promises'
-    },
-    {
-      id: 'outline_next',
-      title: `Plan Chapter ${chapters.length + 1} Outline`,
-      desc: 'Formulate structural plot beats before initiating drafting. Respect the established Style DNA.',
-      type: 'structure',
-      severity: 'low',
-      targetView: 'design' as ViewType,
-      subTab: 'structure'
-    }
   ];
-
-  const forgottenItems = [
-    {
-      id: 'alpha_absence',
-      title: 'Anna Absent for 11 Chapters',
-      context: 'Last seen Chapter 3. Major motivation drift detected.',
-      severity: 'danger'
-    },
-    {
-      id: 'missing_seal',
-      title: 'Great Seal Ring Unresolved',
-      context: 'Promised artifact in Chapter 5. Risk of memory leakage.',
-      severity: 'warning'
-    },
-    {
-      id: 'secret_not_ref',
-      title: 'Secret Will Untouched',
-      context: 'Introduced in Chapter 1. Not referenced for 14,500 words.',
-      severity: 'danger'
-    },
-    {
-      id: 'logic_drift',
-      title: 'Arthur\'s Core Motivation Drift',
-      context: 'Fears regarding the forged dossier show narrative decay.',
-      severity: 'warning'
-    }
-  ];
-
-  const manuscriptStatus = () => {
-    if (project.draftStage === 1) return 'Pass 1 : Skeletal Architecture';
-    if (project.draftStage === 2) return 'Pass 2 : Staged Expansion';
-    if (project.draftStage === 3) return 'Pass 3 : Immersive Draft';
-    if (project.draftStage === 4) return 'Pass 4 : Final Master Polish';
-    return 'Dynamic Assembly';
-  };
 
   return (
-    <div id="command-centre" className="h-full overflow-y-auto overscroll-contain custom-scrollbar select-none" style={{ minHeight: 0 }}>
-      <div className="max-w-6xl mx-auto space-y-8 pb-20 pt-4 px-4 md:px-6">
-        
-        {/* Answer 1: Where am I? (Top Section) */}
-        <section aria-labelledby="project-header" className="relative border-b border-border-subtle pb-6 flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div className="space-y-4 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] uppercase tracking-widest text-[#d4af37] bg-brand-dark/30 border border-brand-primary/20 px-2.5 py-1 rounded font-serif italic">
-                Narrative Intelligence OS v2
-              </span>
-              <span className="text-[10px] uppercase tracking-widest text-text-secondary border border-border-subtle px-2 py-1 rounded">
-                {manuscriptStatus()}
-              </span>
-            </div>
-            
-            <div className="relative max-w-xl group">
-              <input 
-                id="manuscript-title-input"
-                value={localTitle}
-                onChange={(e) => setLocalTitle(e.target.value)}
-                aria-label="Manuscript Title"
-                className="text-2xl md:text-3xl font-serif text-text-primary bg-transparent border-none focus:ring-0 p-0 w-full font-semibold focus:outline-none placeholder:text-text-secondary/25 selection:bg-brand-primary/20"
-                placeholder="Define Narrative..."
-              />
-              <div className="absolute -bottom-1 left-0 w-12 h-[1px] bg-brand-primary/30 group-focus-within:w-full group-focus-within:bg-brand-primary transition-all duration-500" />
-            </div>
-
-            <p className="text-xs text-text-secondary font-serif italic max-w-lg">
-              {project.premise ? `"${project.premise.slice(0, 160)}${project.premise.length > 160 ? '...' : ''}"` : "The canvas remains empty. Define the story premise under Discover to activate core intelligence modules."}
-            </p>
-          </div>
-
-          {/* Quick Metrics Cards */}
-          <div className="flex flex-wrap items-center gap-4">
-            {/* Health Score Shield */}
-            <div className="bg-surface-card border border-border-subtle p-3.5 rounded-lg flex items-center gap-3.5 min-w-[150px]">
-              <div className="relative w-10 h-10 flex items-center justify-center">
-                <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 36 36">
-                  <path className="text-surface-muted" strokeWidth="2.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                  <path className="text-brand-primary" strokeWidth="2.5" strokeDasharray={`${healthScore}, 100`} strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                </svg>
-                <span className="text-[11px] font-mono font-semibold text-[#d4af37]">{healthScore}%</span>
+    <div className="h-full overflow-y-auto overscroll-contain custom-scrollbar" style={{ minHeight: 0 }}>
+      <div className="max-w-7xl mx-auto space-y-12 pb-32 px-4 md:px-8">
+      {/* Target Prize Banner */}
+      {project.targetPrize && (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          onClick={() => setView('prizes')}
+          className="bg-brand-primary text-white p-1 rounded-[2.5rem] shadow-2xl shadow-brand-primary/30 group cursor-pointer relative overflow-hidden"
+        >
+          <div className="absolute inset-0 bg-brand-accent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+          <div className="bg-brand-dark/20 backdrop-blur-md rounded-[2.4rem] p-6 flex flex-col md:flex-row items-center justify-between gap-6 relative z-10 border border-white/10">
+            <div className="flex items-center gap-6">
+              <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center shadow-inner group-hover:rotate-12 transition-transform">
+                <Trophy size={28} className="text-white" />
               </div>
-              <div>
-                <div className="text-[9px] uppercase tracking-widest text-[#a3a3a3]">Project Health</div>
-                <div className="text-[11px] font-serif font-semibold text-text-primary capitalize">
-                  {healthScore >= 90 ? 'Pristine' : healthScore >= 75 ? 'Cohesive' : 'Decaying focus'}
-                </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/60 mb-1">Strategic Objective</span>
+                <span className="text-xl md:text-2xl font-black italic font-serif leading-tight">{project.targetPrize}</span>
               </div>
             </div>
-
-            {/* Word count block */}
-            <div className="bg-surface-card border border-border-subtle p-3.5 rounded-lg min-w-[150px]">
-              <div className="text-[11px] font-mono font-semibold text-text-primary">
-                {(project.stats?.totalWords || 0).toLocaleString()} <span className="text-[10px] text-text-secondary/40">/</span> {(project.targetWordCount || 75000).toLocaleString()}
-              </div>
-              <div className="text-[9px] uppercase tracking-widest text-text-secondary mt-1">Word Count Scope</div>
-              <div className="h-[2px] bg-surface-muted rounded-full mt-2 overflow-hidden">
-                <div 
-                  className="h-full bg-[#d4af37]" 
-                  style={{ width: `${Math.min(100, ((project.stats?.totalWords || 0) / (project.targetWordCount || 75000)) * 100)}%` }} 
-                />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Dynamic Project Settings Quick Rail */}
-        <section aria-label="Project parameters" className="grid grid-cols-1 sm:grid-cols-3 gap-4 border border-border-subtle/50 bg-surface-card/30 p-3.5 rounded-lg">
-          <div className="flex items-center gap-2 px-2 py-1">
-            <Layers className="text-[#d5af37] h-4 w-4 shrink-0" />
-            <div className="flex flex-col">
-              <span className="text-[8px] uppercase tracking-wider text-[#90939a]">Format Archetype</span>
-              <span className="text-[11px] font-serif font-semibold text-text-primary uppercase tracking-wide">{project.type}</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 px-2 py-1 border-t sm:border-t-0 sm:border-x border-border-subtle/40">
-            <Compass className="text-[#d5af37] h-4 w-4 shrink-0" />
-            <div className="flex flex-col">
-              <span className="text-[8px] uppercase tracking-wider text-[#90939a]">Established Genre</span>
-              <span className="text-[11px] font-serif font-semibold text-text-primary">{project.genre || "Not configured"}</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 px-2 py-1">
-            <Sparkles className="text-[#d5af37] h-4 w-4 shrink-0" />
-            <div className="flex flex-col">
-              <span className="text-[8px] uppercase tracking-wider text-[#90939a]">Atmosphere / Tone</span>
-              <span className="text-[11px] font-serif font-semibold text-text-primary capitalize">{project.tone || "Cinematic"}</span>
-            </div>
-          </div>
-        </section>
-
-        {/* Narrative Acceleration Engines */}
-        <section aria-label="Narrative acceleration engines" className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <button
-            onClick={() => setView('autodraft')}
-            className="text-left bg-surface-card border border-border-subtle/50 hover:border-brand-primary p-5 rounded-lg flex flex-col justify-between transition-all group duration-300 relative overflow-hidden"
-          >
-            <div className="absolute top-0 right-0 p-3 opacity-[0.03] group-hover:opacity-10 transition-opacity">
-              <Sparkles size={48} className="text-brand-primary" />
-            </div>
-            <div className="space-y-2">
-              <div className="w-8 h-8 rounded bg-brand-primary/10 text-brand-primary flex items-center justify-center">
-                <Sparkles size={16} />
-              </div>
-              <h3 className="text-xs font-semibold uppercase tracking-widest text-[#d4af37] group-hover:text-brand-primary transition-colors leading-relaxed">
-                Auto Draft Engine
-              </h3>
-              <p className="text-[11px] text-[#90939a] font-serif leading-relaxed italic">
-                Generate high-fidelity outline structures and assemble complete scene drafts automatically based on memory canon.
-              </p>
-            </div>
-            <div className="flex items-center gap-1.5 text-[9px] uppercase tracking-wider text-brand-primary/60 group-hover:text-brand-primary pt-4 transition-colors font-mono font-semibold">
-              <span>Initialize Drafter</span>
-              <ArrowRight size={10} className="group-hover:translate-x-1 transition-transform" />
-            </div>
-          </button>
-
-          <button
-            onClick={() => setView('architect')}
-            className="text-left bg-surface-card border border-border-subtle/50 hover:border-brand-primary p-5 rounded-lg flex flex-col justify-between transition-all group duration-300 relative overflow-hidden"
-          >
-            <div className="absolute top-0 right-0 p-3 opacity-[0.03] group-hover:opacity-10 transition-opacity">
-              <Activity size={48} className="text-brand-primary" />
-            </div>
-            <div className="space-y-2">
-              <div className="w-8 h-8 rounded bg-[#d4af37]/10 text-[#d4af37] flex items-center justify-center">
-                <Activity size={16} />
-              </div>
-              <h3 className="text-xs font-semibold uppercase tracking-widest text-[#d4af37] group-hover:text-brand-primary transition-colors leading-relaxed">
-                Fix a Bad Book
-              </h3>
-              <p className="text-[11px] text-[#90939a] font-serif leading-relaxed italic">
-                Engage complete diagnostic scans on uploaded books, messy manuscript drafts, or raw outline archives to fix structural flaws.
-              </p>
-            </div>
-            <div className="flex items-center gap-1.5 text-[9px] uppercase tracking-wider text-brand-primary/60 group-hover:text-brand-primary pt-4 transition-colors font-mono font-semibold">
-              <span>Run Diagnostics</span>
-              <ArrowRight size={10} className="group-hover:translate-x-1 transition-transform" />
-            </div>
-          </button>
-
-          <button
-            onClick={() => setView('upload')}
-            className="text-left bg-surface-card border border-border-subtle/50 hover:border-brand-primary p-5 rounded-lg flex flex-col justify-between transition-all group duration-300 relative overflow-hidden"
-          >
-            <div className="absolute top-0 right-0 p-3 opacity-[0.03] group-hover:opacity-10 transition-opacity">
-              <BrainCircuit size={48} className="text-brand-primary" />
-            </div>
-            <div className="space-y-2">
-              <div className="w-8 h-8 rounded bg-[#2dd4bf]/10 text-[#2dd4bf] flex items-center justify-center">
-                <BrainCircuit size={16} />
-              </div>
-              <h3 className="text-xs font-semibold uppercase tracking-widest text-[#d4af37] group-hover:text-brand-primary transition-colors leading-relaxed">
-                Evidence Ingestion
-              </h3>
-              <p className="text-[11px] text-[#90939a] font-serif leading-relaxed italic">
-                Injest background project briefs, historical archive materials, research dossiers, or PDF sources directly into memory.
-              </p>
-            </div>
-            <div className="flex items-center gap-1.5 text-[9px] uppercase tracking-wider text-brand-primary/60 group-hover:text-brand-primary pt-4 transition-colors font-mono font-semibold">
-              <span>Open Evidence Lab</span>
-              <ArrowRight size={10} className="group-hover:translate-x-1 transition-transform" />
-            </div>
-          </button>
-        </section>
-
-        {/* Central Split Layout: Answer 2, 3, and 4 */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
-          {/* Answer 4: WHAT SHOULD I DO NEXT? (Central Panel) */}
-          <div className="lg:col-span-7 space-y-6">
-            <div className="flex items-center justify-between border-b border-border-subtle pb-2">
-              <div className="flex items-center gap-2">
-                <ClipboardList className="text-[#d4af37]" id="recommended-actions-heading" size={18} />
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-[#d3af37]">
-                  Next Recommended Actions
-                </h2>
-              </div>
-              <span className="text-[9px] uppercase tracking-widest text-text-secondary/60">Actionable Plan</span>
-            </div>
-
-            <div className="space-y-4">
-              {recommendations.map((action, idx) => (
-                <motion.button
-                  key={action.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.08 }}
-                  onClick={() => {
-                    setView(action.targetView);
-                    // Pass active sub-tab via state or storage if supported, but standard view switching is great!
-                    localStorage.setItem(`ls_subtab_${action.targetView}`, action.subTab);
-                  }}
-                  className="w-full text-left bg-surface-card border border-border-subtle hover:border-[#d4af37]/40 p-4 rounded-lg flex gap-4 transition-all group duration-300 relative overflow-hidden"
-                >
-                  <div className="mt-0.5 shrink-0 flex items-center justify-center">
-                    <div className={`w-8 h-8 rounded flex items-center justify-center ${
-                      action.severity === 'critical' ? 'bg-red-500/10 text-red-400' :
-                      action.severity === 'high' ? 'bg-amber-500/10 text-amber-500' :
-                      'bg-brand-primary/10 text-brand-primary'
-                    }`}>
-                      {action.type === 'motivation' && <Users size={16} />}
-                      {action.type === 'continuity' && <ShieldAlert size={16} />}
-                      {action.type === 'mystery' && <Lightbulb size={16} />}
-                      {action.type === 'structure' && <GitBranch size={16} />}
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5 flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-[11px] font-semibold text-text-primary group-hover:text-[#d3af37] transition-colors leading-none pr-2">
-                        {action.title}
-                      </h3>
-                      <span className={`text-[8px] font-mono font-semibold uppercase tracking-wider px-2 py-0.5 rounded leading-none shrink-0 ${
-                        action.severity === 'critical' ? 'bg-red-500/20 text-red-400' :
-                        action.severity === 'high' ? 'bg-[#d4af37]/20 text-[#e5be60]' :
-                        'bg-surface-muted text-text-secondary'
-                      }`}>
-                        {action.severity}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-[#90939a] leading-relaxed font-serif">
-                      {action.desc}
-                    </p>
-                    <div className="flex items-center gap-1.5 text-[9px] uppercase tracking-wider text-brand-primary/60 group-hover:text-brand-primary pt-1.5 transition-colors font-mono font-semibold">
-                      <span>Initiate resolution workflow</span>
-                      <ArrowRight size={10} className="group-hover:translate-x-1 transition-transform" />
-                    </div>
-                  </div>
-                </motion.button>
-              ))}
-            </div>
-          </div>
-
-          {/* Answer 3: WHAT HAVE I FORGOTTEN? (Right Panel) */}
-          <div className="lg:col-span-5 space-y-6">
-            <div className="flex items-center justify-between border-b border-border-subtle pb-2">
-              <div className="flex items-center gap-2">
-                <BrainCircuit className="text-[#d4af37]" id="forgotten-panel-heading" size={18} />
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-[#d3af37]">
-                  What Have I Forgotten?
-                </h2>
-              </div>
-              <span className="text-[9px] uppercase tracking-widest text-text-secondary/60">Narrative Decay</span>
-            </div>
-
-            <div className="bg-surface-card/60 border border-border-subtle p-5 rounded-lg space-y-5">
-              <p className="text-[11px] text-text-secondary leading-relaxed font-serif">
-                Unresolved threads, absent characters, and structural assumptions decay silently. Arthur's universe remains aligned only under active surveillance.
-              </p>
-
-              {/* Audit Button */}
-              <button
-                onClick={runLatticeAudit}
-                disabled={isAuditing}
-                className="w-full py-2.5 px-4 bg-surface-muted border border-border-subtle hover:border-[#d4af37]/40 rounded text-[10px] font-semibold text-text-primary tracking-widest uppercase transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                {isAuditing ? (
-                  <>
-                    <Activity size={12} className="animate-pulse text-brand-primary" />
-                    <span>Scanning Narrative Lattice ({auditProgress}%)</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkle size={12} className="text-[#d4af37]" />
-                    <span>Audit Narrative Memories</span>
-                  </>
-                )}
-              </button>
-
-              <AnimatePresence mode="wait">
-                {isAuditing && (
+            <div className="flex items-center gap-8 w-full md:w-auto">
+               <div className="flex flex-col items-end flex-1 md:flex-initial">
+                 <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/50 mb-2">Eligibility Matrix</span>
+                 <div className="h-2 w-full md:w-64 bg-white/10 rounded-full overflow-hidden border border-white/5 p-0.5">
                   <motion.div 
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden bg-[#131416] p-3 rounded border border-border-subtle/30"
-                  >
-                    <div className="text-[9px] font-mono text-brand-primary/80 uppercase tracking-widest">Compiler status:</div>
-                    <div className="text-[10px] font-mono text-text-secondary mt-1 animate-pulse">
-                      Analyzing chapter handshakes, character goals, unresolved mysteries...
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <div className="divide-y divide-border-subtle/30 pt-2 space-y-3">
-                {forgottenItems.map((item) => (
-                  <div key={item.id} className="pt-3 flex gap-3 min-w-0">
-                    <div className="mt-1 shrink-0">
-                      <div className={`w-1.5 h-1.5 rounded-full ${item.severity === 'danger' ? 'bg-red-400 shadow-[0_0_8px_#f87171]' : 'bg-amber-400 shadow-[0_0_8px_#facc15]'}`} />
-                    </div>
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <h4 className="text-[11px] font-semibold text-text-primary truncate">
-                        {item.title}
-                      </h4>
-                      <p className="text-[11px] text-[#90939a] leading-tight font-serif italic">
-                        {item.context}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${project.prizeAssessments?.find(a => a.prizeName === project.targetPrize)?.eligibilityScore || 0}%` }}
+                    className="h-full bg-white transition-all duration-1000 shadow-[0_0_15px_#fff] rounded-full" 
+                  />
+                 </div>
+               </div>
+              <div className="p-4 bg-white text-brand-primary rounded-2xl shadow-xl animate-pulse">
+                <Target size={24} />
               </div>
             </div>
+          </div>
+        </motion.div>
+      )}
 
-            {/* Answer 2: What Matters? (Brief overview of characters & secrets) */}
-            <div className="bg-brand-dark/20 border border-brand-primary/10 p-5 rounded-lg space-y-3 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                <Users size={60} />
-              </div>
-              <h3 className="text-[10px] font-semibold uppercase tracking-widest text-[#d4af37] flex items-center gap-1.5">
-                <Compass size={14} />
-                Current Focus Vector
-              </h3>
-              <p className="text-[11px] text-[#90939a] font-serif leading-relaxed">
-                You are currently tracking **{characters.length} characters** and **{plotNodes.length} active plot beads** across **{chapters.length} drafted chapters**. Keep characters lied to and ensure subtext carries the weight of the secrets.
-              </p>
-            </div>
-            
+      <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-8 md:gap-12 border-b border-border-subtle pb-12 md:pb-16 relative">
+        <div className="flex-1 space-y-4 md:space-y-6">
+          <div className="flex items-center gap-4">
+            <span className="text-[9px] md:text-[10px] font-black text-brand-primary uppercase tracking-[0.4em] md:tracking-[0.5em] bg-brand-primary/10 border border-brand-primary/20 px-4 md:px-5 py-1.5 md:py-2 rounded-xl md:rounded-2xl flex items-center gap-3">
+              <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-brand-primary animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
+              Intelligence Vector
+            </span>
+            <span className="text-[8px] md:text-[9px] font-black text-text-secondary uppercase tracking-widest opacity-30 italic">Rev: {project.stats?.revCount || 1}</span>
+          </div>
+          <div className="relative group">
+            <input 
+              value={localTitle}
+              onChange={(e) => setLocalTitle(e.target.value)}
+              className="text-4xl sm:text-5xl md:text-6xl lg:text-8xl font-black text-text-primary tracking-tighter italic font-serif bg-transparent border-none focus:ring-0 p-0 w-full leading-tight md:leading-none hover:text-brand-primary transition-all cursor-text placeholder:opacity-10"
+              placeholder="Define Narrative..."
+            />
+            <div className="absolute -bottom-2 left-0 w-24 h-1 bg-brand-primary opacity-20 group-focus-within:w-full group-focus-within:opacity-100 transition-all duration-700" />
           </div>
         </div>
+        
+        <div className="flex flex-wrap gap-2 md:gap-4 items-center bg-surface-card p-3 md:p-4 rounded-[1.5rem] md:rounded-[2.5rem] border border-border-subtle shadow-[0_30px_60px_rgba(0,0,0,0.4)] relative z-20">
+           <div className="flex items-center gap-2 md:gap-3 border-r border-border-subtle pr-3 md:pr-5 mr-1 group/sel">
+              <Layers className="text-text-secondary group-hover/sel:text-brand-primary transition-colors h-4 w-4 md:h-5 md:w-5" />
+              <select 
+                value={project.type}
+                onChange={(e) => updateProject({ type: e.target.value as ProjectType })}
+                className="bg-transparent text-[9px] md:text-[11px] font-black text-text-primary outline-none py-1 md:py-2 uppercase tracking-[0.1em] md:tracking-[0.2em] cursor-pointer hover:text-brand-primary transition-colors appearance-none min-w-[100px] md:min-w-[120px]"
+              >
+                {PROJECT_TYPES.map(t => <option key={t.value} value={t.value} className="bg-brand-dark">{t.label}</option>)}
+              </select>
+           </div>
+
+           <div className="flex items-center gap-2 md:gap-3 sm:border-r border-border-subtle sm:pr-3 md:pr-5 sm:mr-1 group/sel">
+              <BookOpen className="text-text-secondary group-hover/sel:text-brand-primary transition-colors h-4 w-4 md:h-5 md:w-5" />
+              <select 
+                value={project.genre}
+                onChange={(e) => updateProject({ genre: e.target.value })}
+                className="bg-transparent text-[9px] md:text-[11px] font-black text-text-primary outline-none py-1 md:py-2 uppercase tracking-[0.1em] md:tracking-[0.2em] cursor-pointer hover:text-brand-primary transition-colors max-w-[140px] md:max-w-[160px] appearance-none"
+              >
+                <option value="" className="bg-brand-dark">Unset Genre</option>
+                {GENRES.map(g => <option key={g} value={g} className="bg-brand-dark">{g}</option>)}
+              </select>
+           </div>
+
+           <div className="flex items-center gap-2 md:gap-3 border-r border-border-subtle pr-3 md:pr-5 mr-1 group/sel hidden sm:flex">
+              <Sparkles className="text-text-secondary group-hover/sel:text-brand-primary transition-colors h-4 w-4 md:h-5 md:w-5" />
+              <select 
+                value={project.tone}
+                onChange={(e) => updateProject({ tone: e.target.value })}
+                className="bg-transparent text-[9px] md:text-[11px] font-black text-text-primary outline-none py-1 md:py-2 uppercase tracking-[0.1em] md:tracking-[0.2em] cursor-pointer hover:text-brand-primary transition-colors max-w-[140px] md:max-w-[160px] appearance-none"
+              >
+                <option value="" className="bg-brand-dark">Unset Tone</option>
+                {TONES.map(t => <option key={t} value={t} className="bg-brand-dark">{t}</option>)}
+              </select>
+           </div>
+
+           <div className="flex items-center gap-2 md:gap-4 border-r border-border-subtle pr-4 md:pr-8 mr-1 px-2 md:px-4">
+              {MATURITY_LEVELS.map((lvl) => (
+                <button
+                  key={lvl.value}
+                  onClick={() => updateProject({ maturity: lvl.value })}
+                  title={`${lvl.label} Protocol`}
+                  className={`p-2 md:p-3 rounded-lg md:rounded-2xl transition-all relative group/maturity ${
+                    project.maturity === lvl.value 
+                      ? `bg-brand-primary text-white shadow-2xl shadow-brand-primary/30 scale-110` 
+                      : 'bg-surface-muted text-text-secondary hover:text-brand-primary grayscale opacity-30 hover:opacity-100 hover:grayscale-0'
+                  }`}
+                >
+                  <lvl.icon size={16} className="md:w-5 md:h-5" />
+                  {project.maturity === lvl.value && (
+                    <motion.div layoutId="maturity-glow" className="absolute inset-0 bg-white/20 rounded-lg md:rounded-2xl blur-md" />
+                  )}
+                </button>
+              ))}
+           </div>
+
+           <div className="flex items-center gap-4 pr-2">
+              <button 
+                onClick={saveToCloud}
+                className={`p-4 rounded-2xl transition-all shadow-xl active:scale-95 border ${isSaving ? 'bg-brand-primary border-brand-primary text-white shadow-brand-primary/20' : 'bg-surface-muted border-border-subtle text-text-secondary hover:text-brand-primary hover:border-brand-primary/40'}`}
+                title="Sync Intent"
+              >
+                {isSaving ? <Activity size={22} className="animate-spin" /> : <Save size={22} />}
+              </button>
+              <button 
+                onClick={deleteProject}
+                className="p-4 bg-surface-muted text-text-secondary hover:text-red-500 hover:bg-red-500/10 border border-border-subtle hover:border-red-500/30 rounded-2xl transition-all active:scale-95"
+                title="Purge Artifact"
+              >
+                <Trash2 size={22} />
+              </button>
+           </div>
+        </div>
+      </header>
+
+      {/* Hero Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8">
+        {stats.map((stat, i) => (
+          <motion.button
+            key={stat.label}
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.1, type: "spring", stiffness: 100 }}
+            onClick={() => setView(stat.view as ViewType)}
+            className="p-6 md:p-8 bg-surface-card border border-border-subtle rounded-[2rem] md:rounded-[2.5rem] flex flex-col items-start gap-4 md:gap-6 hover:border-brand-primary/50 hover:shadow-[0_20px_50px_rgba(0,0,0,0.4)] transition-all group text-left relative overflow-hidden active:scale-[0.98]"
+          >
+            <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-10 transition-opacity">
+               <stat.icon size={80} />
+            </div>
+            <div className={`p-3 md:p-4 rounded-xl md:rounded-2xl bg-surface-muted text-text-secondary group-hover:bg-brand-primary group-hover:text-white transition-all duration-500 shadow-sm`}>
+              <stat.icon className="w-5 h-5 md:w-6 md:h-6" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-2xl md:text-4xl font-black text-text-primary leading-none mb-2 tabular-nums">{stat.value.toLocaleString()}</div>
+              <div className="text-[9px] md:text-[10px] text-text-secondary font-black uppercase tracking-[0.2em] leading-none opacity-60 group-hover:opacity-100 transition-opacity">{stat.label}</div>
+            </div>
+          </motion.button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-10">
+        {/* Premise Editor */}
+        <section className="md:col-span-12 p-6 md:p-10 bg-surface-card border border-border-subtle rounded-[2rem] md:rounded-[3rem] space-y-6 shadow-2xl group transition-all hover:border-brand-primary/30">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[10px] font-black text-brand-primary flex items-center gap-3 uppercase tracking-[0.3em]">
+              <FileText size={18} />
+              Strategic Narrative Focus
+            </h3>
+            <span className="text-[10px] font-black text-text-secondary uppercase tracking-[0.3em] opacity-40">Artifact ID: {project.id.slice(-8)}</span>
+          </div>
+          <textarea
+            value={localPremise}
+            onChange={(e) => setLocalPremise(e.target.value)}
+            placeholder="Define the primary intelligence vector for this narrative..."
+            className="w-full h-40 bg-surface-muted border border-border-subtle rounded-2xl p-8 text-text-primary focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary focus:bg-surface-card resize-none transition-all outline-none leading-relaxed text-xl md:text-2xl font-serif italic placeholder:opacity-30"
+          />
+        </section>
+
+        {/* Word Count Strategy */}
+        <section className="md:col-span-12 p-6 md:p-12 bg-brand-dark rounded-[2rem] md:rounded-[3.5rem] text-text-primary space-y-6 md:space-y-10 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.8)] border border-border-subtle relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-16 opacity-5 pointer-events-none group-hover:scale-110 transition-transform duration-1000 grayscale">
+             <Target size={240} />
+          </div>
+          
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 relative z-10">
+            <div>
+              <div className="text-[10px] font-black text-brand-primary uppercase tracking-[0.4em] mb-4">Volume of Intent</div>
+              <h3 className="text-3xl md:text-4xl font-black italic font-serif tracking-tight leading-none">Architectural Density</h3>
+            </div>
+            <div className="text-right">
+              <div className="text-4xl md:text-6xl font-black italic font-serif text-brand-primary leading-none mb-3 tabular-nums drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+                {project.stats?.totalWords?.toLocaleString() || 0} <span className="text-text-secondary/40 text-2xl md:text-3xl font-normal not-italic mx-2">/</span> {project.targetWordCount?.toLocaleString() || '∞'}
+              </div>
+              <div className="text-[10px] font-black text-text-secondary uppercase tracking-[0.3em] opacity-60">Synthesized Words</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 relative z-10">
+            {[1000, 5000, 20000, 50000, 80000, 100000].map(count => (
+              <button 
+                key={count}
+                onClick={() => updateProject({ targetWordCount: count })}
+                className={`py-4 px-6 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+                  project.targetWordCount === count 
+                    ? 'bg-brand-primary border-brand-primary text-white shadow-2xl shadow-brand-primary/40 scale-105' 
+                    : 'bg-white/5 border-white/5 text-text-secondary hover:bg-white/10 hover:border-white/20 hover:text-text-primary'
+                }`}
+              >
+                {count >= 1000 ? `${count/1000}k` : count} Units
+              </button>
+            ))}
+            <div className="col-span-1">
+              <input 
+                type="number"
+                placeholder="Custom..."
+                value={![1000, 5000, 20000, 50000, 80000, 100000].includes(project.targetWordCount ?? 0) && project.targetWordCount ? project.targetWordCount : ''}
+                className="w-full py-4 px-6 bg-white/5 border border-white/5 rounded-2xl text-[10px] font-black uppercase tracking-widest text-text-primary outline-none focus:border-brand-primary focus:bg-white/10 transition-all placeholder:text-text-secondary/30"
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  if (val > 0) updateProject({ targetWordCount: val });
+                }}
+              />
+            </div>
+          </div>
+
+          {project.targetWordCount && (
+            <div className="relative pt-6 z-10">
+              <div className="h-6 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 p-1">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(100, ((project.stats?.totalWords || 0) / project.targetWordCount) * 100)}%` }}
+                  className="h-full bg-brand-primary relative rounded-full shadow-[0_0_20px_rgba(59,130,246,0.6)]"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white/30 animate-shimmer" />
+                </motion.div>
+              </div>
+              <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-[0.3em] text-text-secondary">
+                <span>Vector Star: 0</span>
+                <span className="text-brand-primary bg-brand-primary/10 px-3 py-1 rounded-md border border-brand-primary/20">
+                  {Math.round(((project.stats?.totalWords || 0) / project.targetWordCount) * 100)}% Synchronized
+                </span>
+                <span>Limit: {project.targetWordCount.toLocaleString()}</span>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Draft Stage Panel */}
+        <section className="md:col-span-12">
+          <DraftStagePanel project={project} chapters={chapters} updateProject={updateProject} />
+        </section>
+
+      </div>
       </div>
     </div>
   );

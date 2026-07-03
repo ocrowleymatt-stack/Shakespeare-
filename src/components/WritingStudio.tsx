@@ -12,7 +12,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import Markdown from 'react-markdown';
 import Fuse from 'fuse.js';
 import { calculateSimilarity, detectEchoes, findRedundantChapters } from '../lib/narrativeUtils';
-import { Repeat, Menu, Settings, Wind, FileWarning, Eye } from 'lucide-react';
+import { Repeat } from 'lucide-react';
 
 // Initialize PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -56,18 +56,29 @@ export default function WritingStudio({
   const [isCritiquing, setIsCritiquing] = useState(false);
   const [isAnalyzingProse, setIsAnalyzingProse] = useState(false);
   const [isCheckingTurn, setIsCheckingTurn] = useState(false);
-  const [writingStatus, setWritingStatus] = useState<string>('');
   const [sceneTurnResult, setSceneTurnResult] = useState<{ turned: boolean; score: number; reasoning: string; missing: string } | null>(null);
   const [proseViolations, setProseViolations] = useState<{ type: string; message: string; severity: 'low' | 'medium' | 'high' }[]>([]);
   const [showProsePanel, setShowProsePanel] = useState(false);
   const [showNodePicker, setShowNodePicker] = useState(false);
   const [viewingSourceId, setViewingSourceId] = useState<string | null>(null);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [archiveSearchTerm, setArchiveSearchTerm] = useState('');
-  const [archiveFilter, setArchiveFilter] = useState<'All' | 'Manuscript' | 'Research' | 'Source' | 'AI Compilation'>('All');
+  const [archiveFilter, setArchiveFilter] = useState<'All' | 'Manuscript' | 'Research' | 'AI Compilation'>('All');
   const [isSaving, setIsSaving] = useState(false);
-  const [isLeftRailOpen, setIsLeftRailOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 1180 : true);
-  const [isRightRailOpen, setIsRightRailOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 1180 : true);
+  const [isLeftRailOpen, setIsLeftRailOpen] = useState(true);
+  const [isRightRailOpen, setIsRightRailOpen] = useState(true);
+
+  // Close both rails by default on mobile so the editor gets full width
+  useEffect(() => {
+    if (isMobile) {
+      setIsLeftRailOpen(false);
+      setIsRightRailOpen(false);
+    } else {
+      setIsLeftRailOpen(true);
+      setIsRightRailOpen(true);
+    }
+  }, [isMobile]);
   const [lastSaved, setLastSaved] = useState<number>(Date.now());
   const [isScanningChars, setIsScanningChars] = useState(false);
   const dirtyRef = useRef<boolean>(false);
@@ -77,8 +88,7 @@ export default function WritingStudio({
   const typeMap: Record<string, string> = {
     'Manuscript': 'ARCHIVE',
     'AI Compilation': 'SYNTHESIS',
-    'Research': 'INTEL',
-    'Source': 'SOURCE'
+    'Research': 'INTEL'
   };
 
   // Background Character Extraction (Auto-Absorb)
@@ -123,7 +133,7 @@ export default function WritingStudio({
     const raw = [
       ...(project.sourceMaterials || []).map(s => ({
         ...s,
-        displayType: (s.name || "").startsWith('[MANUSCRIPT]') ? 'Manuscript' : ((s.name || "").startsWith('[RESEARCH]') ? 'Research' : 'Source')
+        displayType: (s.name || "").startsWith('[MANUSCRIPT]') ? 'Manuscript' : ((s.name || "").startsWith('[RESEARCH]') ? 'Research' : 'Research')
       })),
       ...(project.research || []).map((r: any) => ({
         id: r.id,
@@ -151,7 +161,6 @@ export default function WritingStudio({
   }, [project.sourceMaterials, project.research, archiveSearchTerm, archiveFilter]);
   const viewingSource = allSources.find(s => s.id === viewingSourceId);
   const [isMobile, setIsMobile] = useState(false);
-  const [mobileTab, setMobileTab] = useState<'editor' | 'outline' | 'ops' | 'critiques'>('editor');
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 1180);
@@ -159,6 +168,11 @@ export default function WritingStudio({
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
+
+  useEffect(() => {
+    if (isMobile) setIsSidebarVisible(false);
+    else setIsSidebarVisible(true);
+  }, [isMobile]);
 
   const addChapter = () => {
     const newChapter: Chapter = {
@@ -273,19 +287,11 @@ export default function WritingStudio({
     
     setIsSaving(true);
     try {
-      const updates = { 
+      await updateChapterRef.current(selectedChapterId, { 
         title: localTitle, 
         summary: localSummary, 
         content: localContent 
-      };
-      
-      updateChapterRef.current(selectedChapterId, updates);
-      
-      const existing = chapters.find((c: Chapter) => c.id === selectedChapterId);
-      if (existing && upsertChapter) {
-        await upsertChapter({ ...existing, ...updates });
-      }
-      
+      });
       setLastSaved(Date.now());
       // On successful save, the cloud matches our local state
       localStorage.setItem(`ls_hardsave_${selectedChapterId}`, localContent);
@@ -362,7 +368,7 @@ export default function WritingStudio({
     if (id === selectedChapterId) return;
     await flushSave();
     setSelectedChapterId(id);
-    if (isMobile) setIsLeftRailOpen(false);
+    if (isMobile) setIsSidebarVisible(false);
   };
 
   const deleteChapter = (id: string) => {
@@ -394,11 +400,6 @@ export default function WritingStudio({
     if (!selectedChapter || !localContent.trim()) return;
     setIsRefining(true);
     setIsPendingAiSync(true);
-    setWritingStatus('Initializing Deep Simmer...');
-    const statusTimer = setTimeout(() => setWritingStatus('Reviewing plot vectors...'), 4000);
-    const statusTimer2 = setTimeout(() => setWritingStatus('Calculating narrative flow...'), 9000);
-    const statusTimer3 = setTimeout(() => setWritingStatus('Synthesizing surgical refinement...'), 15000);
-    
     try {
       const earlierContent = (chapters || [])
         .filter((c: Chapter) => c.order < selectedChapter.order)
@@ -420,7 +421,7 @@ export default function WritingStudio({
         project.externalReviews || [],
         project.draftStage,
         chapters.length,
-        project.cutMode
+        project.cutMode       // honour Cut & Compress mode
       );
       setLocalContent(refined);
       updateChapter(selectedChapter.id, { content: refined });
@@ -429,10 +430,6 @@ export default function WritingStudio({
       onError?.(err.message || 'Deep Simmer failed.');
     } finally {
       setIsRefining(false);
-      setWritingStatus('');
-      clearTimeout(statusTimer);
-      clearTimeout(statusTimer2);
-      clearTimeout(statusTimer3);
       setTimeout(() => setIsPendingAiSync(false), 2000);
     }
   };
@@ -441,11 +438,6 @@ export default function WritingStudio({
     if (!selectedChapter) return;
     setIsWriting(true);
     setIsPendingAiSync(true);
-    setWritingStatus('Waking Composition Core...');
-    const statusTimer = setTimeout(() => setWritingStatus('Absorbing earlier context...'), 3500);
-    const statusTimer2 = setTimeout(() => setWritingStatus('Projecting narrative arc...'), 8000);
-    const statusTimer3 = setTimeout(() => setWritingStatus('Weaving final prose...'), 14000);
-
     try {
       const earlierContent = chapters
         .filter((c: Chapter) => c.order < selectedChapter.order)
@@ -464,12 +456,12 @@ export default function WritingStudio({
         project.research || [],
         project.maturity,
         project.sourceMaterials || [],
-        [], // directives placeholder
+        selectedChapter.directives || [], // chapter directives from plan
         project.targetWordCount,
         project.externalReviews || [],
-        project.draftStage,  // staged pass number (1-4)
-        chapters.length,       // total chapter count
-        project.cutMode
+        project.draftStage,       // staged pass number (1-4)
+        chapters.length,           // total chapter count for per-chapter target
+        project.cutMode            // honour Cut & Compress mode
       );
       
       const newContent = (localContent + '\n\n' + content).trim();
@@ -480,45 +472,37 @@ export default function WritingStudio({
       onError?.(err.message || 'Composition Core failed to initialize.');
     } finally {
       setIsWriting(false);
-      setWritingStatus('');
-      clearTimeout(statusTimer);
-      clearTimeout(statusTimer2);
-      clearTimeout(statusTimer3);
       setTimeout(() => setIsPendingAiSync(false), 2000);
     }
   };
 
   const handleAnalyzeProse = async () => {
     if (!localContent.trim() || !selectedChapter) return;
-    
-    // 1. FAST FEEDBACK (Algorithmic)
-    const localEchoes = detectEchoes(localContent);
-    const echoViolations: { type: string, message: string, severity: 'low' | 'medium' | 'high' }[] = localEchoes.slice(0, 5).map(echo => ({
-      type: 'Echo',
-      message: `Word "${echo.word.toUpperCase()}" is echoing close together. Rule 14: Cut thematic static.`,
-      severity: 'low'
-    }));
-
-    // Chapter Redundancy Check
-    const redundant = findRedundantChapters(chapters);
-    const isRedundant = redundant.some(r => r.chapterId === selectedChapter.id);
-    if (isRedundant) {
-      echoViolations.unshift({
-        type: 'Static',
-        message: `NARRATIVE LOOP WARNING: This chapter overlaps significantly with existing beats. Ensure a unique "turn".`,
-        severity: 'medium' as const
-      });
-    }
-
-    setProseViolations([...echoViolations]);
-    setShowProsePanel(true);
-    if (isMobile) {
-      setMobileTab('editor');
-    }
-
-    // 2. AI ANALYSIS
     setIsAnalyzingProse(true);
+    setShowProsePanel(true);
     try {
+      // ── STAGE 1: Fast local heuristic pre-filters (run first, no API cost) ──
+      const localEchoes = detectEchoes(localContent);
+      const echoViolations: { type: string, message: string, severity: 'low' | 'medium' | 'high' }[] = localEchoes.slice(0, 5).map(echo => ({
+        type: 'Echo',
+        message: `Word "${echo.word.toUpperCase()}" is echoing close together. Rule 14: Cut thematic static.`,
+        severity: 'low'
+      }));
+
+      const redundant = findRedundantChapters(chapters);
+      const isRedundant = redundant.some(r => r.chapterId === selectedChapter.id);
+      if (isRedundant) {
+        echoViolations.unshift({
+          type: 'Static',
+          message: `NARRATIVE LOOP WARNING: This chapter overlaps significantly with existing beats. Ensure a unique "turn".`,
+          severity: 'medium' as const
+        });
+      }
+
+      // Surface local violations immediately so user sees fast feedback
+      setProseViolations([...echoViolations]);
+
+      // ── STAGE 2: AI deep prose analysis (runs after local pre-filters) ──
       const precedingContext = chapters
         .filter(c => c.order < selectedChapter.order)
         .slice(-3)
@@ -526,23 +510,24 @@ export default function WritingStudio({
         .join('\n\n');
 
       const violations = await AIService.analyzeProse(
-        localContent, 
-        project.type, 
-        precedingContext, 
+        localContent,
+        project.type,
+        precedingContext,
         project.externalReviews || []
       );
-      
+
+      // Merge: local pre-filter violations first, then AI violations
       setProseViolations([...echoViolations, ...violations]);
 
-      // 3. AUTO-TRIGGER SCENE TURN CHECK
-      if (localContent.length >= 200) {
+      // ── STAGE 3: Auto-trigger scene-turn check after prose analysis ──
+      if (localContent.trim().length >= 200) {
         setIsCheckingTurn(true);
         setSceneTurnResult(null);
         try {
           const turnResult = await AIService.checkSceneTurn(localContent, project.externalReviews || []);
           setSceneTurnResult(turnResult);
-        } catch (e) {
-          console.warn("Auto-turn check silent failure:", e);
+        } catch (turnErr) {
+          console.warn('Scene turn auto-check failed silently:', turnErr);
         } finally {
           setIsCheckingTurn(false);
         }
@@ -562,12 +547,9 @@ export default function WritingStudio({
     }
     setIsCheckingTurn(true);
     setShowProsePanel(true);
-    if (isMobile) {
-      setMobileTab('editor');
-    }
     setSceneTurnResult(null);
     try {
-      const result = await AIService.checkSceneTurn(localContent, project.externalReviews || []);
+      const result = await AIService.checkSceneTurn(localContent);
       setSceneTurnResult(result);
     } catch (err: any) {
       console.error(err);
@@ -581,9 +563,6 @@ export default function WritingStudio({
     if (!selectedChapter?.content) return;
     setIsCritiquing(true);
     setShowCritique(true);
-    if (isMobile) {
-      setMobileTab('critiques');
-    }
     try {
       const results = await AIService.getSwarmCritique(
         selectedChapter.content, 
@@ -746,6 +725,7 @@ export default function WritingStudio({
     setIsFocusMode(false);
     setIsLeftRailOpen(true);
     setIsRightRailOpen(true);
+    setIsSidebarVisible(true);
     if (editorRef.current) {
       editorRef.current.scrollTo(0, 0);
     }
@@ -766,102 +746,51 @@ export default function WritingStudio({
       className={`h-full flex flex-col lg:flex-row gap-0 relative overflow-hidden transition-all duration-700 ${isFocusMode ? 'bg-black' : 'bg-surface-bg'}`}
       style={{ minHeight: 0 }}
     >
-      {/* Mobile Inline Switcher */}
-      {isMobile && !isFocusMode && (
-        <div className="flex border-b border-border-subtle bg-brand-dark/95 backdrop-blur-xl p-2 gap-1.5 sticky top-0 z-[60] shrink-0 w-full">
-          <button
-            onClick={() => setMobileTab('outline')}
-            className={`flex-1 py-2 px-1 rounded text-xs font-semibold uppercase tracking-widest text-center transition-all min-h-[44px] flex items-center justify-center ${
-              mobileTab === 'outline' 
-                ? 'bg-brand-primary text-white shadow-lg shadow-brand-primary/20 scale-[1.02]' 
-                : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
-            }`}
-          >
-            Outline
-          </button>
-          <button
-            onClick={() => setMobileTab('editor')}
-            className={`flex-1 py-2 px-1 rounded text-xs font-semibold uppercase tracking-widest text-center transition-all min-h-[44px] flex items-center justify-center ${
-              mobileTab === 'editor' 
-                ? 'bg-brand-primary text-white shadow-lg shadow-brand-primary/20 scale-[1.02]' 
-                : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
-            }`}
-          >
-            Draft
-          </button>
-          <button
-            onClick={() => setMobileTab('ops')}
-            className={`flex-1 py-2 px-1 rounded text-xs font-semibold uppercase tracking-widest text-center transition-all min-h-[44px] flex items-center justify-center ${
-              mobileTab === 'ops' 
-                ? 'bg-brand-primary text-white shadow-lg shadow-brand-primary/20 scale-[1.02]' 
-                : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
-            }`}
-          >
-            AI Ops
-          </button>
-          <button
-            onClick={() => setMobileTab('critiques')}
-            className={`flex-1 py-2 px-1 rounded text-xs font-semibold uppercase tracking-widest text-center transition-all min-h-[44px] flex items-center justify-center ${
-              mobileTab === 'critiques' 
-                ? 'bg-brand-primary text-white shadow-lg shadow-brand-primary/20 scale-[1.02]' 
-                : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
-            }`}
-          >
-            Critiques
-          </button>
-        </div>
-      )}
-
       {/* Sidebar - Chapter Navigation & Sources */}
       <AnimatePresence initial={false}>
-        {!isFocusMode && (isMobile ? mobileTab === 'outline' : isLeftRailOpen) && (
+        {!isFocusMode && isLeftRailOpen && (
           <motion.aside 
-            initial={isMobile ? { opacity: 0 } : { width: 0, opacity: 0, x: -50 }}
-            animate={{ width: isMobile ? '100%' : 'clamp(15rem, 21vw, 18rem)', opacity: 1, x: 0 }}
-            exit={isMobile ? { opacity: 0 } : { width: 0, opacity: 0, x: -50 }}
+            initial={{ width: 0, opacity: 0, x: -50 }}
+            animate={{ width: isMobile ? '100vw' : 'clamp(15rem, 21vw, 18rem)', opacity: 1, x: 0 }}
+            exit={{ width: 0, opacity: 0, x: -50 }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
-            className={`border-r border-border-subtle ethereal-panel flex flex-col z-30 h-full relative overflow-hidden shrink-0 no-print ${isMobile ? 'w-full h-full relative bg-brand-dark' : 'relative'}`}
+            className={`border-r border-border-subtle bg-surface-card flex flex-col z-30 h-full relative overflow-hidden shrink-0 no-print ${isMobile ? 'fixed inset-0 shadow-[0_0_100px_rgba(0,0,0,0.8)]' : 'relative'}`}
           >
-            <AnimatePresence>
-              {isMobile && !isMobile && (
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => setIsLeftRailOpen(false)}
-                  className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[-1]"
-                />
-              )}
-            </AnimatePresence>
-            {!isMobile && (
-              <div className="absolute top-4 right-4 z-40">
-                <button 
-                  onClick={() => setIsLeftRailOpen(false)}
-                  className="p-3 sm:p-1 hover:bg-white/5 rounded sm:rounded-md text-text-secondary hover:text-brand-primary flex items-center justify-center min-w-[36px] min-h-[36px]"
-                  title="Collapse Sidebar"
-                >
-                  <ChevronLeft size={20} className="sm:w-4 sm:h-4" />
-                </button>
-              </div>
-            )}
+            <div className="absolute top-4 right-4 z-40">
+              <button 
+                onClick={() => setIsLeftRailOpen(false)}
+                className="p-1 hover:bg-white/5 rounded-md text-text-secondary hover:text-brand-primary flex"
+                title="Collapse Sidebar"
+              >
+                <ChevronLeft size={16} />
+              </button>
+            </div>
         {/* Manuscript Section */}
-        <div className="flex-none p-3 md:p-4 border-b border-border-subtle relative bg-surface-bg shadow-sm">
-          <div className="flex items-center justify-between mb-1.5 pr-1">
-            <h3 className="text-[11px] font-semibold flex items-center gap-2 text-text-primary">
-              <BookOpen size={14} className="text-brand-primary" />
-              Manuscript
+        <div className="flex-none p-4 xl:p-6 border-b border-border-subtle relative bg-surface-card shadow-sm">
+          {isMobile && (
+            <button 
+              onClick={() => setIsSidebarVisible(false)}
+              className="absolute top-6 right-6 p-2.5 text-text-secondary hover:text-text-primary bg-surface-muted rounded-xl transition-all md:hidden border border-border-subtle"
+            >
+              <X size={18} />
+            </button>
+          )}
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-[10px] font-black text-brand-primary uppercase tracking-[0.4em] flex items-center gap-3">
+              <BookOpen size={16} />
+              The Manuscript
             </h3>
             <div className="flex gap-2">
               <button 
                 onClick={() => toggleSection('foundations')}
-                className="p-1 px-2 text-xs font-semibold text-text-secondary hover:text-text-primary transition-colors border border-border-subtle hover:border-text-secondary/30 rounded-md flex items-center gap-1"
+                className="p-1 px-2 text-[8px] font-black uppercase text-brand-primary/40 hover:text-brand-primary transition-colors border border-brand-primary/10 hover:border-brand-primary/30 rounded-lg flex items-center gap-2"
                 title={collapsedSections.foundations ? 'Restore View' : 'Collapse Section'}
               >
-                {collapsedSections.foundations ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-                {collapsedSections.foundations ? 'Show' : 'Hide'}
+                {collapsedSections.foundations ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
+                {collapsedSections.foundations ? 'Probe' : 'Split'}
               </button>
-              <label className="p-1.5 hover:bg-surface-muted text-text-secondary hover:text-brand-primary rounded-md transition-all cursor-pointer border border-transparent hover:border-border-subtle" title="Import File">
-                <Upload size={14} />
+              <label className="p-2.5 hover:bg-white/5 text-text-secondary hover:text-brand-primary rounded-xl transition-all cursor-pointer border border-transparent hover:border-border-subtle" title="Import Segment">
+                <Upload size={18} />
                 <input 
                   type="file" 
                   className="hidden" 
@@ -944,10 +873,10 @@ export default function WritingStudio({
               </label>
               <button 
                 onClick={addChapter}
-                className="p-1.5 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-md transition-all active:scale-95 border border-brand-primary/20"
-                title="Add Sequence"
+                className="p-2.5 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl transition-all border border-brand-primary/20 active:scale-95"
+                title="Synthesize New Segment"
               >
-                <Plus size={14} />
+                <Plus size={18} />
               </button>
             </div>
           </div>
@@ -957,28 +886,28 @@ export default function WritingStudio({
               <div key={chapter.id} className="group relative">
                 <button
                   onClick={() => handleChapterSelect(chapter.id)}
-                  className={`w-full text-left px-3 py-1 rounded transition-all flex items-center gap-1.5 border ${
+                  className={`w-full text-left px-5 py-4 rounded-2xl transition-all flex items-center gap-4 border ${
                     selectedChapterId === chapter.id 
-                      ? 'bg-brand-primary/10 border-brand-primary/20 text-brand-primary font-medium' 
-                      : 'text-text-secondary hover:text-text-primary hover:bg-surface-muted border-transparent hover:border-border-subtle'
+                      ? 'bg-brand-primary border-brand-primary text-white shadow-xl shadow-brand-primary/20' 
+                      : 'text-text-secondary hover:text-text-primary hover:bg-white/5 border-transparent hover:border-border-subtle'
                   }`}
                 >
-                  <span className={`text-xs font-medium opacity-50 tabular-nums ${selectedChapterId === chapter.id ? 'text-brand-primary' : ''}`}>
-                    {(chapter.order + 1).toString().padStart(2, '0')}
+                  <span className={`text-[9px] font-black uppercase tracking-tighter tabular-nums ${selectedChapterId === chapter.id ? 'opacity-50' : 'text-brand-primary/50'}`}>
+                    ID:{(chapter.order + 1).toString().padStart(2, '0')}
                   </span>
-                  <span className="text-[11px] font-medium truncate flex-1">{chapter.title}</span>
+                  <span className="text-sm font-black truncate flex-1 italic font-serif">{chapter.title}</span>
                 </button>
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center opacity-0 group-hover:opacity-100 transition-all bg-surface-card border border-border-subtle rounded-md p-0.5 shadow-sm">
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center opacity-0 group-hover:opacity-100 transition-all bg-surface-muted/95 backdrop-blur-xl border border-border-subtle rounded-xl p-1 shadow-2xl">
                   <button 
                     onClick={() => moveChapterToSource(chapter)}
-                    className="p-1.5 text-text-secondary hover:text-brand-primary transition-all rounded"
+                    className="p-2 text-text-secondary hover:text-brand-primary transition-all rounded-lg"
                     title="Archive to Source"
                   >
                     <ArrowRight size={14} />
                   </button>
                   <button 
                     onClick={() => deleteChapter(chapter.id)}
-                    className="p-1.5 text-text-secondary hover:text-red-500 transition-all rounded"
+                    className="p-2 text-text-secondary hover:text-red-500 transition-all rounded-lg"
                     title="Purge Segment"
                   >
                     <Trash2 size={14} />
@@ -991,24 +920,24 @@ export default function WritingStudio({
         </div>
 
         {/* Source Ingestion Section */}
-        <div className="p-3 md:p-4 flex-1 flex flex-col gap-1.5 overflow-hidden bg-surface-muted/30">
+        <div className="p-4 xl:p-6 flex-1 flex flex-col gap-4 overflow-hidden bg-surface-muted/30">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h3 className="text-[11px] font-semibold flex items-center gap-2 text-text-primary">
-                <Library size={14} className="text-brand-primary" />
-                Archive & Intel
+            <div className="flex items-center gap-4">
+              <h3 className="text-[10px] font-black text-text-secondary uppercase tracking-[0.4em] flex items-center gap-3">
+                <Library size={16} className="text-brand-primary" />
+                Intelligence Rail
               </h3>
               <button 
                 onClick={() => toggleSection('intel')}
-                className="p-1 px-2 text-xs font-semibold text-text-secondary hover:text-text-primary transition-colors border border-border-subtle hover:border-text-secondary/30 rounded-md flex items-center gap-1 ml-2"
+                className="p-1 px-2 text-[8px] font-black uppercase text-brand-primary/40 hover:text-brand-primary transition-colors border border-brand-primary/10 hover:border-brand-primary/30 rounded-lg flex items-center gap-2"
                 title={collapsedSections.intel ? 'Restore View' : 'Collapse Section'}
               >
-                {collapsedSections.intel ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-                {collapsedSections.intel ? 'Show' : 'Hide'}
+                {collapsedSections.intel ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
+                {collapsedSections.intel ? 'Trace' : 'Hide'}
               </button>
             </div>
-            <label className="p-1.5 hover:bg-surface-muted text-text-secondary hover:text-brand-primary rounded-md transition-all cursor-pointer border border-transparent hover:border-border-subtle" title="Add Source">
-              <Plus size={14} />
+            <label className="p-2.5 bg-white/5 border border-border-subtle text-text-secondary hover:text-brand-primary rounded-xl transition-all cursor-pointer active:scale-95" title="Ingest Data">
+              <Plus size={20} />
               <input type="file" className="hidden" onChange={handleFileUpload} accept=".txt,.md,.json,.yaml,.yml,.pdf" multiple />
             </label>
           </div>
@@ -1016,27 +945,27 @@ export default function WritingStudio({
           {!collapsedSections.intel && (
             <>
               {/* Search and Filter UI */}
-              <div className="space-y-3">
+              <div className="space-y-4">
             <div className="relative group">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary group-focus-within:text-brand-primary transition-colors" />
+              <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary group-focus-within:text-brand-primary transition-colors" />
               <input 
                 type="text" 
-                placeholder="Search Archive..." 
+                placeholder="Fuzzy Vector Search..." 
                 value={archiveSearchTerm}
                 onChange={(e) => setArchiveSearchTerm(e.target.value)}
-                className="w-full bg-surface-card border border-border-subtle rounded py-2 pl-9 pr-4 text-[11px] font-medium text-text-primary focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none placeholder:text-text-secondary/50 transition-all"
+                className="w-full bg-surface-card border border-border-subtle rounded-2xl py-3.5 pl-12 pr-6 text-xs font-black text-text-primary focus:border-brand-primary outline-none placeholder:text-text-secondary/30 transition-all shadow-inner"
               />
             </div>
             
             <div className="flex flex-wrap gap-2">
-              {(['All', 'Manuscript', 'Research', 'Source', 'AI Compilation'] as const).map((type) => (
+              {(['All', 'Manuscript', 'Research', 'AI Compilation'] as const).map((type) => (
                 <button
                   key={type}
                   onClick={() => setArchiveFilter(type)}
-                  className={`px-2 py-1 rounded text-xs font-medium transition-all border ${
+                  className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border ${
                     archiveFilter === type 
-                      ? 'bg-brand-primary/20 border-brand-primary/30 text-brand-primary shadow-sm' 
-                      : 'bg-surface-card text-text-secondary border-border-subtle hover:bg-surface-muted hover:text-text-primary'
+                      ? 'bg-brand-primary border-brand-primary text-white shadow-lg' 
+                      : 'bg-surface-card text-text-secondary border-border-subtle hover:border-text-secondary/30'
                   }`}
                 >
                   {type}
@@ -1053,34 +982,41 @@ export default function WritingStudio({
                     key={source.id} 
                     onClick={() => {
                       setViewingSourceId(source.id);
-                      if (isMobile) setIsLeftRailOpen(false);
+                      if (isMobile) setIsSidebarVisible(false);
                     }}
-                    className="p-3 bg-surface-card rounded border border-border-subtle group relative cursor-pointer hover:border-brand-primary/50 hover:shadow-sm transition-all"
+                    className="p-5 bg-surface-card rounded-2xl border border-border-subtle group relative cursor-pointer hover:border-brand-primary/50 transition-all shadow-lg active:scale-[0.98]"
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2 overflow-hidden">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3 overflow-hidden">
                         {(source as any).displayType === 'AI Compilation' ? (
-                          <div className="w-6 h-6 rounded bg-brand-primary/10 flex items-center justify-center shrink-0">
-                            <Zap className="text-brand-primary" size={14} />
+                          <div className="w-8 h-8 rounded-lg bg-brand-primary/10 flex items-center justify-center">
+                            <Zap className="text-brand-primary fill-brand-primary" size={16} />
                           </div>
                         ) : (
-                          <div className="w-6 h-6 rounded bg-surface-muted flex items-center justify-center shrink-0">
-                            <FileText className="text-text-secondary" size={14} />
+                          <div className="w-8 h-8 rounded-lg bg-surface-muted flex items-center justify-center">
+                            <FileText className="text-text-secondary" size={16} />
                           </div>
                         )}
-                        <span className="text-xs font-semibold text-text-primary truncate flex-1">{source.name}</span>
+                        <span className="text-[10px] font-black text-text-primary uppercase tracking-widest truncate flex-1">{source.name}</span>
                       </div>
+                      <span className={`text-[8px] font-black px-2 py-1 rounded-md uppercase tracking-widest shrink-0 border ${
+                        (source as any).displayType === 'Manuscript' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' :
+                        (source as any).displayType === 'AI Compilation' ? 'bg-brand-primary/10 text-brand-primary border-brand-primary/20' :
+                        'bg-surface-muted text-text-secondary border-border-subtle'
+                      }`}>
+                        {typeMap[(source as any).displayType as keyof typeof typeMap] || (source as any).displayType}
+                      </span>
                     </div>
-                    <p className="text-xs text-text-secondary line-clamp-2 leading-relaxed opacity-80 pl-8">
+                    <p className="text-xs text-text-secondary font-medium line-clamp-2 italic font-serif leading-relaxed opacity-60">
                       {source.content.slice(0, 80)}...
                     </p>
-                    {(source as any).displayType !== 'AI Compilation' && (source as any).displayType !== 'Research' && (source as any).displayType !== 'Manuscript' && (
+                    {(source as any).displayType !== 'AI Compilation' && (source as any).displayType !== 'Research' && (
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
                           removeSource(source.id);
                         }}
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1.5 text-text-secondary hover:text-red-500 transition-all bg-surface-bg border border-border-subtle rounded shadow-sm"
+                        className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 p-2 text-text-secondary hover:text-red-500 transition-all bg-surface-card border border-border-subtle rounded-lg shadow-2xl"
                       >
                         <Trash2 size={12} />
                       </button>
@@ -1090,10 +1026,10 @@ export default function WritingStudio({
               </div>
             ) : (
               <div className="py-16 text-center text-text-secondary">
-                <div className="w-20 h-20 bg-surface-muted rounded flex items-center justify-center mx-auto mb-2 border border-dashed border-border-subtle">
+                <div className="w-20 h-20 bg-surface-muted rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-dashed border-border-subtle">
                   {archiveSearchTerm ? <Search size={28} className="opacity-20" /> : <Upload size={28} className="opacity-20" />}
                 </div>
-                <p className="text-xs font-semibold uppercase tracking-widest leading-relaxed opacity-40">
+                <p className="text-[10px] font-black uppercase tracking-[0.4em] leading-relaxed opacity-40">
                   {archiveSearchTerm ? 'No Secure Matches' : 'Ingest External\nArtifacts Here'}
                 </p>
               </div>
@@ -1105,8 +1041,8 @@ export default function WritingStudio({
 
         {/* Collaborative Presence */}
         {presence.length > 0 && (
-          <div className="p-4 xl:p-4 border-t border-border-subtle ethereal-panel">
-            <div className="text-xs font-semibold text-text-secondary mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
+          <div className="p-4 xl:p-6 border-t border-border-subtle bg-surface-card">
+            <div className="text-[10px] font-black text-text-secondary mb-4 uppercase tracking-[0.3em] flex items-center gap-3">
               <div className="w-2 h-2 rounded-full bg-brand-primary animate-pulse" />
               Live Presence Matrix
             </div>
@@ -1115,7 +1051,7 @@ export default function WritingStudio({
                 <div 
                   key={p.userId} 
                   title={p.userName}
-                  className="w-10 h-10 rounded border-2 border-surface-card bg-brand-dark text-text-primary flex items-center justify-center text-xs font-semibold shadow-2xl ring-2 ring-brand-primary/20"
+                  className="w-10 h-10 rounded-xl border-2 border-surface-card bg-brand-dark text-text-primary flex items-center justify-center text-xs font-black shadow-2xl ring-2 ring-brand-primary/20"
                 >
                   {p.userName.charAt(0)}
                 </div>
@@ -1128,30 +1064,29 @@ export default function WritingStudio({
   </AnimatePresence>
 
   {/* Main Study Area */}
-  {(!isMobile || mobileTab === 'editor') && (
-    <div 
-      className="flex-1 flex flex-col bg-surface-bg relative z-0 min-w-0"
-      style={{ minHeight: 0 }}
-    >
+  <div 
+    className="flex-1 flex flex-col bg-surface-bg relative z-0 min-w-0"
+    style={{ minHeight: 0 }}
+  >
         {/* Toggle Buttons for Rails */}
-        {!isMobile && !isFocusMode && !isLeftRailOpen && (
+        {!isFocusMode && !isLeftRailOpen && (
           <motion.button 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             onClick={() => setIsLeftRailOpen(true)}
-            className="absolute left-0 top-1/2 -translate-y-1/2 z-[55] w-6 h-24 md:h-32 bg-brand-dark border-y border-r border-border-subtle rounded-r-xl flex items-center justify-center text-text-secondary hover:text-brand-primary transition-all hover:w-8 group shadow-2xl"
+            className="fixed left-0 top-1/2 -translate-y-1/2 z-[55] w-6 h-24 bg-brand-dark border-y border-r border-border-subtle rounded-r-xl flex items-center justify-center text-text-secondary hover:text-brand-primary transition-all hover:w-8 group shadow-2xl"
             title="Restore Navigation"
           >
             <ChevronRight size={14} className="group-hover:scale-125 transition-transform" />
           </motion.button>
         )}
 
-        {!isMobile && !isFocusMode && !isRightRailOpen && (
+        {!isFocusMode && !isRightRailOpen && (
           <motion.button 
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             onClick={() => setIsRightRailOpen(true)}
-            className="absolute right-0 top-1/2 -translate-y-1/2 z-[55] w-6 h-24 md:h-32 bg-brand-dark border-y border-l border-border-subtle rounded-l-xl flex items-center justify-center text-text-secondary hover:text-brand-primary transition-all hover:w-8 group shadow-2xl"
+            className="fixed right-0 top-1/2 -translate-y-1/2 z-[55] w-6 h-24 bg-brand-dark border-y border-l border-border-subtle rounded-l-xl flex items-center justify-center text-text-secondary hover:text-brand-primary transition-all hover:w-8 group shadow-2xl"
             title="Restore Ops Rail"
           >
             <ChevronLeft size={14} className="group-hover:scale-125 transition-transform" />
@@ -1169,17 +1104,24 @@ export default function WritingStudio({
               style={{ minHeight: 0 }}
             >
               {/* Internal Editor Header */}
-              <div className={`h-auto min-h-14 studio-header border-b border-border-subtle flex flex-wrap items-center justify-between px-3 md:px-2 lg:px-2 py-2 bg-surface-bg/95 backdrop-blur shadow-sm flex-none transition-all ${isFocusMode ? 'opacity-10 hover:opacity-100' : ''} no-print overflow-hidden gap-2`}>
-                <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
-                  {!isFocusMode && !isMobile && (
+              <div className={`h-auto min-h-16 studio-header border-b border-border-subtle flex flex-wrap items-center justify-between px-3 md:px-6 lg:px-8 py-3 bg-surface-card/80 backdrop-blur-xl shadow-2xl flex-none transition-all ${isFocusMode ? 'opacity-10 hover:opacity-100' : ''} no-print overflow-hidden gap-2 md:gap-4`}>
+                <div className="flex items-center gap-2 md:gap-8 shrink-0">
+                  {!isFocusMode && (
                     <button 
-                      onClick={() => setIsLeftRailOpen(!isLeftRailOpen)}
-                      className="p-2.5 hover:bg-white/5 text-text-secondary hover:text-brand-primary rounded border border-transparent hover:border-border-subtle transition-all active:scale-95 flex items-center gap-2 group"
-                      title="Toggle Navigation Menu"
+                      onClick={() => isMobile ? setIsLeftRailOpen(true) : setIsSidebarVisible(!isSidebarVisible)}
+                      className="p-2 md:p-2.5 hover:bg-white/5 text-text-secondary hover:text-brand-primary rounded-xl border border-transparent hover:border-border-subtle transition-all active:scale-95"
+                      title="Open chapter list"
                     >
-                      <Menu size={20} className={isLeftRailOpen ? 'text-brand-primary' : ''} />
-                      <span className="hidden sm:inline text-xs font-medium uppercase tracking-widest group-hover:text-brand-primary transition-colors">NAV</span>
-                      <ChevronRight size={14} className={isLeftRailOpen ? 'rotate-180 transition-transform opacity-50' : 'transition-transform opacity-50'} />
+                      <ChevronRight size={18} className={(!isMobile && isSidebarVisible) ? 'rotate-180 transition-transform' : 'transition-transform'} />
+                    </button>
+                  )}
+                  {!isFocusMode && isMobile && (
+                    <button
+                      onClick={() => setIsRightRailOpen(true)}
+                      className="p-2 hover:bg-white/5 text-text-secondary hover:text-brand-primary rounded-xl border border-transparent hover:border-border-subtle transition-all active:scale-95"
+                      title="Open strategic ops"
+                    >
+                      <ChevronLeft size={18} />
                     </button>
                   )}
                   <div className="flex flex-col gap-1">
@@ -1187,40 +1129,40 @@ export default function WritingStudio({
                        <input 
                         value={localTitle}
                         onChange={(e) => setLocalTitle(e.target.value)}
-                        className="bg-transparent border-none focus:ring-0 font-semibold text-text-primary text-xs md:text-[11px] font-medium italic font-serif w-24 md:w-auto p-0 hover:text-brand-primary transition-colors cursor-text"
+                        className="bg-transparent border-none focus:ring-0 font-black text-text-primary text-xs md:text-base italic font-serif w-24 md:w-auto p-0 hover:text-brand-primary transition-colors cursor-text"
                       />
                       {selectedChapter.isPlan && (
-                        <span className="px-2 py-0.5 bg-brand-primary/20 text-brand-primary text-[7px] font-semibold uppercase rounded border border-brand-primary/30 tracking-widest">Plan Mode</span>
+                        <span className="px-2 py-0.5 bg-brand-primary/20 text-brand-primary text-[7px] font-black uppercase rounded border border-brand-primary/30 tracking-widest">Plan Mode</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
                       <div className={`w-1.5 h-1.5 rounded-full ${isSaving ? 'bg-amber-500 animate-pulse' : 'bg-brand-primary'}`} />
-                      <span className="text-[7px] md:text-xs font-semibold text-text-secondary uppercase tracking-[0.2em] md:tracking-wider leading-none opacity-40">
+                      <span className="text-[7px] md:text-[8px] font-black text-text-secondary uppercase tracking-[0.2em] md:tracking-[0.3em] leading-none opacity-40">
                         {isSaving ? 'Synchronizing' : 'Secure Connection Active'}
                       </span>
                     </div>
                   </div>
-                  <div className="hidden sm:flex items-center gap-1.5 md:gap-2 ml-2 md:ml-4 border-l border-border-subtle pl-4 md:pl-6">
+                  <div className="hidden sm:flex items-center gap-3 md:gap-6 ml-2 md:ml-4 border-l border-border-subtle pl-4 md:pl-6">
                     <div className="flex flex-col">
-                      <span className="text-xs text-text-secondary leading-none mb-0.5">Word Count</span>
-                      <span className={`text-[11px] font-medium tabular-nums transition-colors ${isOverWordLimit ? 'text-red-500' : 'text-brand-primary'}`}>
-                        {wordCount.toLocaleString()}
-                        {isOverWordLimit && <span className="ml-1 text-xs text-red-500">(Over Limit)</span>}
+                      <span className="text-[8px] md:text-[9px] font-black text-text-secondary uppercase leading-none tracking-widest opacity-40 mb-1">Volume</span>
+                      <span className={`text-[9px] md:text-[10px] font-black tabular-nums transition-colors ${isOverWordLimit ? 'text-red-500 animate-pulse' : 'text-brand-primary'}`}>
+                        {wordCount.toLocaleString()} Words
+                        {isOverWordLimit && <span className="ml-1 text-[7px] text-red-500 tracking-tighter">(LIMIT EXCEEDED)</span>}
                       </span>
                     </div>
                     <div className="flex flex-col border-l border-border-subtle pl-4 md:pl-6">
-                      <span className="text-xs text-text-secondary leading-none mb-0.5">Reading Time</span>
-                      <span className="text-[11px] text-text-primary tabular-nums">{readingTime} mins</span>
+                      <span className="text-[8px] md:text-[9px] font-black text-text-secondary uppercase leading-none tracking-widest opacity-40 mb-1">Latency</span>
+                      <span className="text-[9px] md:text-[10px] font-black text-text-primary tabular-nums">{readingTime}m Read</span>
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 md:gap-2 shrink-0 overflow-x-auto custom-scrollbar pb-1 lg:pb-0">
+                <div className="flex items-center gap-2 md:gap-4 shrink-0 overflow-x-auto custom-scrollbar pb-1 lg:pb-0">
                   <button 
                     onClick={handleManualSave}
                     disabled={isSaving}
-                    className={`flex items-center gap-2 md:gap-1.5 px-3 md:px-2 py-2 md:py-1 rounded md:rounded text-xs md:text-xs font-semibold uppercase tracking-widest transition-all border active:scale-95 whitespace-nowrap ${
+                    className={`flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2 md:py-2.5 rounded-xl md:rounded-2xl text-[8px] md:text-[9px] font-black uppercase tracking-widest transition-all border active:scale-95 whitespace-nowrap ${
                       dirtyRef.current 
-                        ? 'bg-brand-primary border-brand-primary text-white shadow-[0_0_20px_rgba(168,85,247,0.4)]' 
+                        ? 'bg-brand-primary border-brand-primary text-white shadow-[0_0_20px_rgba(59,130,246,0.4)]' 
                         : (isSaving ? 'bg-white/5 border-border-subtle text-brand-primary' : 'bg-surface-muted border-border-subtle text-text-secondary hover:text-text-primary hover:border-text-secondary/30')
                     }`}
                   >
@@ -1230,7 +1172,7 @@ export default function WritingStudio({
 
                   <button 
                     onClick={recenter}
-                    className="p-2 md:p-3 rounded md:rounded bg-surface-muted border border-border-subtle text-text-secondary hover:text-brand-primary hover:border-brand-primary transition-all active:scale-95 shrink-0"
+                    className="p-2 md:p-3 rounded-xl md:rounded-2xl bg-surface-muted border border-border-subtle text-text-secondary hover:text-brand-primary hover:border-brand-primary transition-all active:scale-95 shrink-0"
                     title="Re-centre Architecture"
                   >
                     <RefreshCcw size={16} />
@@ -1238,7 +1180,7 @@ export default function WritingStudio({
 
                   <button 
                     onClick={toggleFocus}
-                    className={`p-2 md:p-3 rounded md:rounded transition-all shrink-0 border active:scale-95 ${isFocusMode ? 'btn-nexus-primary border-brand-primary' : 'bg-surface-muted border-border-subtle text-text-secondary hover:text-text-primary hover:border-text-secondary/30'}`}
+                    className={`p-2 md:p-3 rounded-xl md:rounded-2xl transition-all shrink-0 border active:scale-95 ${isFocusMode ? 'bg-brand-primary text-white border-brand-primary' : 'bg-surface-muted border-border-subtle text-text-secondary hover:text-text-primary hover:border-text-secondary/30'}`}
                     title="Toggle Void Focus"
                   >
                     {isFocusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
@@ -1247,10 +1189,10 @@ export default function WritingStudio({
                   <div className="h-6 w-px bg-border-subtle shrink-0 hidden md:block" />
 
                   {/* Plot Node Tags */}
-                  <div className="relative shrink-0 hidden lg:block">
+                  <div className="relative shrink-0">
                     <button 
                       onClick={() => setShowNodePicker(!showNodePicker)}
-                      className={`flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.2em] px-2 py-1 rounded bg-surface-muted border border-border-subtle transition-all active:scale-95 ${showNodePicker ? 'border-brand-primary text-brand-primary' : 'text-text-secondary hover:text-text-primary'}`}
+                      className={`flex items-center gap-3 text-[9px] font-black uppercase tracking-[0.2em] px-4 py-2.5 rounded-2xl bg-surface-muted border border-border-subtle transition-all active:scale-95 ${showNodePicker ? 'border-brand-primary text-brand-primary' : 'text-text-secondary hover:text-text-primary'}`}
                     >
                       <Tag size={14} />
                       {selectedChapter.plotNodeIds?.length || 0} Vectors
@@ -1261,21 +1203,21 @@ export default function WritingStudio({
                           initial={{ opacity: 0, y: 15, scale: 0.95 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                          className="absolute right-0 top-full mt-2 w-64 bg-surface-card border border-border-subtle rounded shadow-lg z-[60] p-4 backdrop-blur-xl"
+                          className="absolute right-0 top-full mt-4 w-72 bg-surface-card border border-border-subtle rounded-3xl shadow-[0_30px_60px_rgba(0,0,0,0.5)] z-[60] p-6 backdrop-blur-2xl"
                         >
-                          <div className="flex items-center justify-between mb-1.5">
-                            <h4 className="text-xs font-semibold text-text-primary">Linked Outline Items</h4>
-                            <Tag size={14} className="text-text-secondary" />
+                          <div className="flex items-center justify-between mb-6">
+                            <h4 className="text-[10px] font-black text-brand-primary uppercase tracking-[0.3em]">Meta-Vector Scene</h4>
+                            <Tag size={14} className="text-text-secondary opacity-30" />
                           </div>
-                          <div className="space-y-1.5 max-h-60 overflow-y-auto custom-scrollbar pr-1">
+                          <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar">
                             {plotNodes.map(node => (
                               <button
                                 key={node.id}
                                 onClick={() => toggleNode(node.id)}
-                                className={`w-full text-left px-3 py-2 rounded text-[11px] flex items-center justify-between group transition-all border ${
+                                className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-between group transition-all border ${
                                   selectedChapter.plotNodeIds?.includes(node.id) 
-                                    ? 'bg-brand-primary/10 border-brand-primary/20 text-brand-primary' 
-                                    : 'text-text-secondary border-transparent hover:bg-surface-muted hover:text-text-primary'
+                                    ? 'bg-brand-primary border-brand-primary text-white shadow-lg' 
+                                    : 'text-text-secondary border-transparent hover:bg-white/5 hover:border-border-subtle'
                                 }`}
                               >
                                 {node.title}
@@ -1299,18 +1241,18 @@ export default function WritingStudio({
                     whileTap={{ scale: 0.98 }}
                     onClick={handleSmartWrite}
                     disabled={isWriting}
-                    className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded text-[11px] font-medium transition-all active:scale-95 ${
-                      isWriting ? 'bg-brand-primary text-surface-bg shadow-sm' : 'bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary'
+                    className={`flex items-center gap-2 md:gap-3 px-4 md:px-6 py-2 md:py-2.5 border rounded-xl md:rounded-[1.25rem] text-[8px] md:text-[9px] font-black transition-all uppercase tracking-[0.1em] md:tracking-[0.2em] shrink-0 border-brand-primary/30 active:scale-95 ${
+                      isWriting ? 'bg-brand-primary text-white border-brand-primary shadow-2xl shadow-brand-primary/20' : 'bg-surface-muted hover:bg-brand-primary/10 text-brand-primary'
                     }`}
                   >
                     {isWriting ? (
                       <>
-                        <Activity size={14} className="animate-pulse" />
-                        {writingStatus || 'Writing...'}
+                        <Activity size={12} className="animate-pulse" />
+                        Writing...
                       </>
                     ) : (
                       <>
-                        <Zap size={14} className="fill-current" />
+                        <Zap size={12} className="fill-current" />
                         Compose
                       </>
                     )}
@@ -1321,15 +1263,15 @@ export default function WritingStudio({
                     whileTap={{ scale: 0.98 }}
                     onClick={handleRefine}
                     disabled={isRefining || !selectedChapter.content.trim()}
-                    className={`hidden lg:flex items-center gap-2 px-3 py-1.5 rounded text-[11px] font-medium transition-all shadow-sm active:scale-95 ${
-                      isRefining ? 'bg-orange-600 text-white' : 'bg-surface-muted hover:bg-white/5 text-text-primary border border-border-subtle'
+                    className={`flex items-center gap-3 px-4 md:px-6 py-2 md:py-2.5 rounded-xl md:rounded-[1.25rem] text-[8px] md:text-[9px] font-black transition-all shadow-2xl uppercase tracking-[0.1em] md:tracking-[0.2em] shrink-0 active:scale-95 ${
+                      isRefining ? 'bg-orange-600 text-white' : 'bg-brand-dark hover:bg-black text-text-primary border border-border-subtle hover:border-brand-primary/50'
                     }`}
                     title="Deep Quality Refinement"
                   >
                     {isRefining ? (
                       <>
                         <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        {writingStatus || 'Simmering...'}
+                        Simmering...
                       </>
                     ) : (
                       <>
@@ -1345,23 +1287,23 @@ export default function WritingStudio({
                 style={{ minHeight: 0 }}
               >
                 <div 
-                  className={`flex-1 flex flex-col writing-scroll ${isFocusMode ? 'p-4 md:p-4 lg:px-14 lg:py-3' : 'p-4 md:p-4 lg:px-2 xl:px-20 2xl:px-32 lg:py-1 xl:py-16'} overflow-y-auto overscroll-contain w-full custom-scrollbar relative transition-all duration-500 pb-32`}
+                  className={`flex-1 flex flex-col writing-scroll ${isFocusMode ? 'p-4 md:p-8 lg:px-14 lg:py-8' : 'p-4 md:p-8 lg:px-12 xl:px-20 2xl:px-32 lg:py-12 xl:py-16'} overflow-y-auto overscroll-contain w-full custom-scrollbar relative transition-all duration-500 pb-32`}
                   style={{ minHeight: 0 }}
                 >
                    <div className="w-full max-w-[80ch] mx-auto flex flex-col items-center">
-                  {/* Summary Box */}
-                  <div className="max-w-[80ch] w-full mb-3 opacity-70 focus-within:opacity-100 hover:opacity-100 transition-all duration-300 p-4 sm:p-4 bg-surface-card border border-border-subtle hover:border-brand-primary/20 rounded relative">
+                   {/* Summary Box */}
+                  <div className="max-w-[80ch] w-full mb-12 opacity-60 focus-within:opacity-100 transition-all duration-700 bg-surface-card/50 p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] border border-border-subtle hover:border-brand-primary/20 relative">
                     {/* Prose Analysis Flyout */}
                     <AnimatePresence>
                       {showProsePanel && (
                         <motion.div 
-                          initial={{ opacity: 0, x: 10 }}
+                          initial={{ opacity: 0, x: 20 }}
                           animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: 10 }}
-                          className="absolute right-0 lg:left-[calc(100%+1rem)] top-full lg:top-0 w-full lg:w-72 bg-surface-card border border-border-subtle rounded shadow-xl p-4 z-[90] mt-4 lg:mt-0"
+                          exit={{ opacity: 0, x: 20 }}
+                          className="absolute right-0 lg:left-[calc(100%+2rem)] top-full lg:top-0 w-full lg:w-80 bg-surface-card border border-border-subtle rounded-3xl shadow-3xl p-6 z-[90] mt-4 lg:mt-0"
                         >
-                          <div className="flex items-center justify-between mb-2">
-                            <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-primary flex items-center gap-2">
+                          <div className="flex items-center justify-between mb-6">
+                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-primary flex items-center gap-2">
                               {sceneTurnResult ? <Flame size={14} /> : <CircleSlash size={14} />}
                               {sceneTurnResult ? "Scene Reversal Meter" : "The Sludge Filter"}
                             </h4>
@@ -1372,16 +1314,16 @@ export default function WritingStudio({
 
                           {isAnalyzingProse || isCheckingTurn ? (
                             <div className="py-20 flex flex-col items-center justify-center text-center">
-                              <Activity className="text-brand-primary animate-pulse mb-1.5" size={32} />
-                              <p className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                              <Activity className="text-brand-primary animate-pulse mb-4" size={32} />
+                              <p className="text-[10px] font-black uppercase tracking-widest text-text-secondary">
                                 {isCheckingTurn ? "Analyzing Narrative Engine..." : "Scanning for pretty sludge..."}
                               </p>
                             </div>
                           ) : sceneTurnResult ? (
-                            <div className="space-y-2">
+                            <div className="space-y-6">
                               <div className="flex items-center justify-between">
-                                <div className="text-xs font-semibold uppercase tracking-widest text-text-secondary">Reversal Intensity</div>
-                                <div className={`text-[11px] font-medium font-semibold italic font-serif ${sceneTurnResult.turned ? 'text-brand-primary' : 'text-red-500'}`}>
+                                <div className="text-[9px] font-black uppercase tracking-widest text-text-secondary">Reversal Intensity</div>
+                                <div className={`text-xl font-black italic font-serif ${sceneTurnResult.turned ? 'text-brand-primary' : 'text-red-500'}`}>
                                   {sceneTurnResult.score}%
                                 </div>
                               </div>
@@ -1394,14 +1336,14 @@ export default function WritingStudio({
                                 />
                               </div>
 
-                              <div className="space-y-1.5">
+                              <div className="space-y-4">
                                 <div>
-                                  <p className="text-xs font-semibold uppercase tracking-widest text-text-secondary mb-1">Reasoning</p>
+                                  <p className="text-[8px] font-black uppercase tracking-widest text-text-secondary mb-1">Reasoning</p>
                                   <p className="text-xs text-text-primary leading-relaxed italic">"{sceneTurnResult.reasoning}"</p>
                                 </div>
                                 {!sceneTurnResult.turned && (
-                                  <div className="p-4 bg-red-500/5 border border-red-500/20 rounded">
-                                    <p className="text-xs font-semibold uppercase tracking-widest text-red-500 mb-1">Critical Missing Component</p>
+                                  <div className="p-4 bg-red-500/5 border border-red-500/20 rounded-2xl">
+                                    <p className="text-[8px] font-black uppercase tracking-widest text-red-500 mb-1">Critical Missing Component</p>
                                     <p className="text-xs text-text-secondary leading-relaxed font-serif uppercase tracking-tighter">{sceneTurnResult.missing}</p>
                                   </div>
                                 )}
@@ -1409,23 +1351,23 @@ export default function WritingStudio({
 
                               <button 
                                 onClick={handleCheckTurn}
-                                className="w-full py-2 bg-surface-muted hover:ethereal-panel border border-border-subtle rounded text-xs font-semibold uppercase tracking-widest text-text-primary transition-all flex items-center justify-center gap-2"
+                                className="w-full py-4 bg-surface-muted hover:bg-surface-card border border-border-subtle rounded-2xl text-[10px] font-black uppercase tracking-widest text-text-primary transition-all flex items-center justify-center gap-2"
                               >
                                 <RefreshCcw size={12} />
                                 Re-Scan Sequence
                               </button>
                             </div>
                           ) : proseViolations.length > 0 ? (
-                            <div className="space-y-1.5 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+                            <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
                               {proseViolations.map((v, i) => (
-                                <div key={i} className={`p-4 rounded border ${
+                                <div key={i} className={`p-4 rounded-2xl border ${
                                   v.severity === 'high' ? 'bg-red-500/5 border-red-500/20' : 
                                   v.severity === 'medium' ? 'bg-orange-500/5 border-orange-500/20' : 
                                   'bg-brand-primary/5 border-brand-primary/20'
                                 }`}>
                                   <div className="flex items-center gap-2 mb-2">
                                     <AlertTriangle size={12} className={v.severity === 'high' ? 'text-red-500' : 'text-orange-500'} />
-                                    <span className="text-xs font-semibold uppercase tracking-widest text-text-primary">{v.type}</span>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-text-primary">{v.type}</span>
                                   </div>
                                   <p className="text-xs text-text-secondary leading-relaxed capitalize">{v.message}</p>
                                 </div>
@@ -1433,23 +1375,23 @@ export default function WritingStudio({
                             </div>
                           ) : (
                             <div className="py-20 flex flex-col items-center justify-center text-center">
-                              <Sparkles className="text-brand-primary mb-1.5" size={32} />
-                              <p className="text-xs font-semibold uppercase tracking-widest text-text-primary">No sludge detected.</p>
-                              <p className="text-xs text-text-secondary mt-2">Your prose is surgical.</p>
+                              <Sparkles className="text-brand-primary mb-4" size={32} />
+                              <p className="text-[10px] font-black uppercase tracking-widest text-text-primary">No sludge detected.</p>
+                              <p className="text-[9px] text-text-secondary mt-2">Your prose is surgical.</p>
                             </div>
                           )}
                         </motion.div>
                       )}
                     </AnimatePresence>
-                    <div className="flex items-center gap-2 text-xs font-semibold text-brand-primary mb-1.5">
-                      <FileText size={14} />
+                    <div className="flex items-center gap-3 text-[10px] font-black text-brand-primary mb-6 uppercase tracking-[0.4em] pl-1 font-sans">
+                      <FileText size={16} />
                       Chapter Architecture
                     </div>
                     <textarea 
                       value={localSummary}
                       onChange={(e) => setLocalSummary(e.target.value)}
                       placeholder="Define the primary intelligence vector for this sequence..."
-                      className="w-full bg-transparent border-t border-border-subtle/30 py-2 text-text-primary text-[11px] font-medium md:text-[11px] font-medium resize-none focus:ring-0 outline-none placeholder:text-text-secondary/40 leading-relaxed font-serif italic"
+                      className="w-full bg-transparent border-t border-border-subtle/30 py-6 text-text-primary text-base md:text-lg resize-none focus:ring-0 outline-none placeholder:text-text-secondary/20 leading-relaxed font-serif italic"
                       rows={2}
                     />
                   </div>
@@ -1459,30 +1401,30 @@ export default function WritingStudio({
                     <AnimatePresence>
                       {hasDraft && (
                         <motion.div 
-                          initial={{ opacity: 0, y: -10 }}
+                          initial={{ opacity: 0, y: -20 }}
                           animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          className="mb-2 p-4 bg-brand-primary/10 border border-brand-primary/20 rounded flex items-center justify-between gap-2"
+                          exit={{ opacity: 0, y: -20 }}
+                          className="mb-8 p-6 bg-brand-primary/10 border border-brand-primary/20 rounded-3xl flex items-center justify-between gap-6"
                         >
-                          <div className="flex items-center gap-2">
-                            <div className="p-3 bg-brand-primary/20 rounded">
+                          <div className="flex items-center gap-4">
+                            <div className="p-3 bg-brand-primary/20 rounded-xl">
                               <Sparkles size={20} className="text-brand-primary" />
                             </div>
                             <div>
-                              <p className="text-[11px] font-semibold text-text-primary italic font-serif">Unsaved Draft Detected</p>
-                              <p className="text-xs text-text-secondary font-medium uppercase tracking-widest mt-1">Local version is more detailed than cloud state.</p>
+                              <p className="text-sm font-black text-text-primary italic font-serif">Unsaved Draft Detected</p>
+                              <p className="text-[10px] text-text-secondary font-medium uppercase tracking-widest mt-1">Local version is more detailed than cloud state.</p>
                             </div>
                           </div>
-                          <div className="flex gap-1.5">
+                          <div className="flex gap-3">
                             <button 
                               onClick={discardDraft}
-                              className="px-2 py-2 text-xs font-semibold uppercase tracking-widest text-text-secondary hover:text-red-500 transition-all"
+                              className="px-5 py-2 text-[10px] font-black uppercase tracking-widest text-text-secondary hover:text-red-500 transition-all"
                             >
                               Discard
                             </button>
                             <button 
                               onClick={restoreDraft}
-                              className="px-2 py-2 btn-nexus-primary rounded text-xs font-semibold uppercase tracking-widest shadow-lg shadow-brand-primary/20 transition-all active:scale-95"
+                              className="px-6 py-2 bg-brand-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-primary/20 transition-all active:scale-95"
                             >
                               Restore Draft
                             </button>
@@ -1496,7 +1438,7 @@ export default function WritingStudio({
                       value={localContent}
                       onChange={(e) => setLocalContent(e.target.value)}
                       placeholder="Initialize narrative thread..."
-                      className="w-full h-auto min-h-[65dvh] bg-transparent border-none focus:ring-0 text-sm md:text-base text-text-primary leading-relaxed resize-none outline-none font-serif placeholder:text-text-secondary/35 selection:bg-brand-primary/30 overflow-hidden"
+                      className="w-full h-auto min-h-[65dvh] bg-transparent border-none focus:ring-0 text-xl md:text-2xl text-text-primary leading-[1.8] resize-none outline-none font-serif placeholder:text-text-secondary/10 selection:bg-brand-primary/30"
                       spellCheck={true}
                     />
                   </div>
@@ -1506,62 +1448,49 @@ export default function WritingStudio({
 
                 {/* Right Rail - Analysis & Actions */}
                 <AnimatePresence>
-                  {!isFocusMode && (isMobile ? mobileTab === 'ops' : isRightRailOpen) && (
+                  {!isFocusMode && isRightRailOpen && (
                     <motion.div 
                       key="right-rail"
-                      initial={isMobile ? { opacity: 0 } : { width: 0, opacity: 0 }}
-                      animate={{ width: isMobile ? '100%' : 'clamp(13rem, 18vw, 15.5rem)', opacity: 1 }}
-                      exit={isMobile ? { opacity: 0 } : { width: 0, opacity: 0 }}
+                      initial={{ width: 0, opacity: 0 }}
+                      animate={{ width: isMobile ? '100vw' : 'clamp(13rem, 18vw, 15.5rem)', opacity: 1 }}
+                      exit={{ width: 0, opacity: 0 }}
                       transition={{ type: "spring", damping: 30, stiffness: 300 }}
-                      className={`h-full border-l border-border-subtle ethereal-panel flex flex-col z-30 shrink-0 relative overflow-hidden ${isMobile ? 'w-full h-full relative border-none' : 'relative'}`}
+                      className={`h-full border-l border-border-subtle bg-surface-card flex flex-col z-30 shrink-0 relative overflow-hidden ${isMobile ? 'fixed inset-0 pt-20' : ''}`}
                     >
-                      <AnimatePresence>
-                        {isMobile && isRightRailOpen && (
-                          <motion.div 
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setIsRightRailOpen(false)}
-                            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[-1]"
-                          />
-                        )}
-                      </AnimatePresence>
-                      <div className="p-3 md:p-4 border-b border-border-subtle flex items-center justify-between shrink-0">
-                        <span className="text-xs font-semibold text-brand-primary uppercase tracking-widest">Strategic Ops</span>
-                        <div className="flex items-center gap-2">
+                      <div className="p-8 border-b border-border-subtle flex items-center justify-between">
+                        <span className="text-[10px] font-black text-brand-primary uppercase tracking-[0.4em]">Strategic Ops</span>
+                        <div className="flex items-center gap-4">
                           <Sparkles size={14} className="text-brand-primary animate-pulse" />
-                          {!isMobile && (
-                            <button 
-                              onClick={() => setIsRightRailOpen(false)}
-                              className="p-2.5 sm:p-1 hover:bg-white/5 rounded sm:rounded-md text-text-secondary hover:text-brand-primary flex items-center justify-center min-w-[36px] min-h-[36px]"
-                              title="Collapse Ops Rail"
-                            >
-                              <ChevronRight size={20} className="sm:w-4 sm:h-4" />
-                            </button>
-                          )}
+                          <button 
+                            onClick={() => setIsRightRailOpen(false)}
+                            className="p-1 hover:bg-white/5 rounded-md text-text-secondary hover:text-brand-primary block"
+                            title="Collapse Ops Rail"
+                          >
+                            <ChevronRight size={16} />
+                          </button>
                         </div>
                       </div>
-                      <div className="flex-1 overflow-y-auto custom-scrollbar p-3 md:p-4 xl:p-4 space-y-3 md:space-y-1.5 xl:space-y-5">
+                      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 xl:p-5 space-y-4 xl:space-y-5">
                         <button 
                           onClick={handleAnalyzeProse}
                           disabled={isAnalyzingProse}
-                          className={`w-full p-4 h-32 rounded border transition-all active:scale-95 group shadow-xl relative flex flex-col items-center justify-center gap-1.5 bg-surface-muted/30 ${
+                          className={`w-full p-4 h-32 rounded-3xl border transition-all active:scale-95 group shadow-xl relative flex flex-col items-center justify-center gap-3 bg-surface-muted/30 ${
                             isAnalyzingProse ? 'animate-pulse border-brand-primary bg-brand-primary/5' : 'hover:border-brand-primary hover:bg-brand-primary/5'
                           }`}
                         >
                           <CircleSlash size={32} className={isAnalyzingProse ? 'text-brand-primary' : 'text-text-secondary group-hover:text-brand-primary'} />
-                          <span className="text-xs font-semibold uppercase tracking-widest text-text-secondary group-hover:text-brand-primary">The Sludge Filter</span>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-text-secondary group-hover:text-brand-primary">The Sludge Filter</span>
                         </button>
 
                         <button 
                           onClick={handleCheckTurn}
                           disabled={isCheckingTurn}
-                          className={`w-full p-4 h-32 rounded border transition-all active:scale-95 group shadow-xl relative flex flex-col items-center justify-center gap-1.5 bg-surface-muted/30 ${
+                          className={`w-full p-4 h-32 rounded-3xl border transition-all active:scale-95 group shadow-xl relative flex flex-col items-center justify-center gap-3 bg-surface-muted/30 ${
                             isCheckingTurn ? 'animate-pulse border-brand-primary bg-brand-primary/5' : 'hover:border-brand-primary hover:bg-brand-primary/5'
                           }`}
                         >
                           <Flame size={32} className={isCheckingTurn ? 'text-brand-primary' : 'text-text-secondary group-hover:text-brand-primary'} />
-                          <span className="text-xs font-semibold uppercase tracking-widest text-text-secondary group-hover:text-brand-primary">Reversal Meter</span>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-text-secondary group-hover:text-brand-primary">Reversal Meter</span>
                         </button>
 
                         <div className="h-px bg-border-subtle mx-4" />
@@ -1569,20 +1498,18 @@ export default function WritingStudio({
                         <button 
                           onClick={handleCritique}
                           disabled={isCritiquing}
-                          className="w-full p-4 bg-brand-dark border border-border-subtle text-text-secondary hover:text-brand-primary hover:border-brand-primary rounded shadow-xl active:scale-95 transition-all group flex flex-col items-center justify-center gap-1.5"
+                          className="w-full p-4 bg-brand-dark border border-border-subtle text-text-secondary hover:text-brand-primary hover:border-brand-primary rounded-3xl shadow-xl active:scale-95 transition-all group flex flex-col items-center justify-center gap-3"
                         >
                           <Users size={32} className={isCritiquing ? 'animate-pulse' : ''} />
-                          <span className="text-xs font-semibold uppercase tracking-widest">Narrative Swarm</span>
+                          <span className="text-[9px] font-black uppercase tracking-widest">Narrative Swarm</span>
                         </button>
 
-                         <button 
+                        <button 
                           onClick={() => {/* Deep Scan */}}
-                          className="w-full p-4 bg-brand-dark border border-border-subtle text-text-secondary hover:text-brand-primary hover:border-brand-primary rounded shadow-xl active:scale-95 transition-all group flex flex-col items-center justify-center gap-2 opacity-30 cursor-not-allowed"
-                          title="DNA Mapping - Architectural Analysis (Coming Soon)"
+                          className="w-full p-6 bg-brand-dark border border-border-subtle text-text-secondary hover:text-brand-primary hover:border-brand-primary rounded-3xl shadow-xl active:scale-95 transition-all group flex flex-col items-center justify-center gap-4 opacity-30 cursor-not-allowed"
                         >
                           <Fingerprint size={32} />
-                          <span className="text-xs font-semibold uppercase tracking-widest text-text-secondary/50">DNA Mapping</span>
-                          <span className="text-[7px] font-semibold uppercase tracking-widest text-brand-primary/40 -mt-2">Coming Soon</span>
+                          <span className="text-[9px] font-black uppercase tracking-widest">DNA Mapping</span>
                         </button>
                       </div>
                     </motion.div>
@@ -1590,94 +1517,80 @@ export default function WritingStudio({
                 </AnimatePresence>
 
                 {/* Mobile Bottom Bar for Actions */}
-                {!isFocusMode && !isMobile && (
-                  <div className="lg:hidden fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 flex items-center gap-1.5 ethereal-panel/90 backdrop-blur-xl border border-border-subtle p-2 rounded shadow-2xl z-[80] max-w-[95vw] overflow-x-auto no-scrollbar">
-                    <button onClick={recenter} className="p-3.5 text-text-secondary hover:text-brand-primary min-w-[44px] min-h-[44px] flex items-center justify-center" title="Recenter workspace"><RefreshCcw size={20} /></button>
-                    <button onClick={handleAnalyzeProse} className="p-3.5 text-text-secondary hover:text-brand-primary min-w-[44px] min-h-[44px] flex items-center justify-center" title="Analyze Prose"><CircleSlash size={20} /></button>
-                    <button onClick={handleCheckTurn} className="p-3.5 text-text-secondary hover:text-brand-primary min-w-[44px] min-h-[44px] flex items-center justify-center" title="Check Scene Reversal"><Flame size={20} /></button>
-                    <button onClick={handleSmartWrite} className="p-4 btn-nexus-primary rounded min-w-[48px] min-h-[48px] flex items-center justify-center" title="Compose with Caspa"><Zap size={20} /></button>
-                    <button onClick={handleRefine} className="p-3.5 text-text-secondary hover:text-brand-primary min-w-[44px] min-h-[44px] flex items-center justify-center" title="Refine Prose"><Repeat size={20} /></button>
-                    <button onClick={handleCritique} className="p-3.5 text-text-secondary hover:text-brand-primary min-w-[44px] min-h-[44px] flex items-center justify-center" title="Show critiques"><Users size={20} /></button>
-                  </div>
-                )}
+                <div className="lg:hidden fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-surface-card/90 backdrop-blur-xl border border-border-subtle p-1.5 rounded-2xl shadow-2xl z-[80]">
+                  <button onClick={recenter} className="p-3 text-text-secondary hover:text-brand-primary"><RefreshCcw size={20} /></button>
+                  <button onClick={handleAnalyzeProse} className="p-3 text-text-secondary hover:text-brand-primary"><CircleSlash size={20} /></button>
+                  <button onClick={handleCheckTurn} className="p-3 text-text-secondary hover:text-brand-primary"><Flame size={20} /></button>
+                  <button onClick={handleSmartWrite} className="p-4 bg-brand-primary text-white rounded-xl"><Zap size={20} /></button>
+                  <button onClick={handleRefine} className="p-3 text-text-secondary hover:text-brand-primary"><Flame size={20} /></button>
+                  <button onClick={handleCritique} className="p-3 text-text-secondary hover:text-brand-primary"><Users size={20} /></button>
+                </div>
 
                 {/* Critique Sidebar */}
                 <AnimatePresence>
-                  {(isMobile ? mobileTab === 'critiques' : showCritique) && (
+                  {showCritique && (
                     <motion.div 
                       key="critique"
-                      initial={isMobile ? { opacity: 0 } : { width: 0, opacity: 0 }}
-                      animate={{ width: isMobile ? '100%' : 'clamp(20rem, 30vw, 26rem)', opacity: 1 }}
-                      exit={isMobile ? { opacity: 0 } : { width: 0, opacity: 0 }}
-                      transition={{ type: "spring", damping: 30, stiffness: 300 }}
-                      className={`border-l border-border-subtle bg-brand-dark flex flex-col overflow-hidden h-full relative ${isMobile ? 'w-full h-full relative border-none z-30 shadow-none' : 'z-[150] shadow-[-40px_0_100px_rgba(0,0,0,0.5)]'}`}
+                      initial={{ width: 0, opacity: 0 }}
+                      animate={{ width: isMobile ? '100vw' : 'clamp(20rem, 30vw, 26rem)', opacity: 1 }}
+                      exit={{ width: 0, opacity: 0 }}
+                      className={`border-l border-border-subtle bg-brand-dark flex flex-col overflow-hidden shadow-[-40px_0_100px_rgba(0,0,0,0.5)] h-full relative z-50 ${isMobile ? 'fixed inset-0 pt-20' : ''}`}
                     >
-                      <AnimatePresence>
-                        {isMobile && showCritique && (
-                          <motion.div 
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setShowCritique(false)}
-                            className="fixed inset-0 bg-black/70 backdrop-blur-md z-[-1]"
-                          />
-                        )}
-                      </AnimatePresence>
-                      <div className="p-4 md:p-4 border-b border-border-subtle flex items-center justify-between bg-surface-bg shadow-sm">
+                      <div className="p-8 border-b border-border-subtle flex items-center justify-between bg-surface-card">
                         <div className="flex flex-col">
-                          <h3 className="text-[11px] font-semibold text-brand-primary flex items-center gap-2 mb-0.5">
-                            <Zap size={14} className="fill-brand-primary" />
+                          <h3 className="text-[10px] font-black text-brand-primary flex items-center gap-3 uppercase tracking-[0.4em] mb-1">
+                            <Zap size={16} className="fill-brand-primary" />
                             Case Narrative
                           </h3>
-                          <span className="text-xs text-text-secondary opacity-70">Spectral Analysis</span>
+                          <span className="text-[9px] font-black text-text-secondary opacity-40 uppercase tracking-widest">Spectral Deep Analysis</span>
                         </div>
                         <button 
-                          onClick={() => { if (isMobile) { setMobileTab('editor'); } else { setShowCritique(false); } }} 
-                          className="p-1.5 text-text-secondary hover:text-white transition-colors bg-surface-muted hover:bg-red-500 rounded border border-transparent hover:border-red-600 shadow-sm active:scale-95 group z-[100]"
-                          title="Close Analysis"
+                          onClick={() => setShowCritique(false)} 
+                          className="p-4 text-white transition-all bg-red-600 rounded-2xl border-2 border-red-500 shadow-[0_0_30px_rgba(220,38,38,0.4)] hover:bg-red-700 active:scale-90 group z-[100]"
+                          title="Close Case Narrative"
                         >
-                          <X size={16} strokeWidth={2.5} className="group-hover:rotate-90 transition-transform" />
+                          <X size={24} strokeWidth={3} className="group-hover:scale-110 transition-transform" />
                         </button>
                       </div>
-                      <div className="p-4 md:p-4 overflow-y-auto custom-scrollbar flex-1 space-y-3">
+                      <div className="p-10 overflow-y-auto custom-scrollbar flex-1 space-y-12">
                         {isCritiquing ? (
-                          <div className="h-full flex flex-col items-center justify-center gap-2">
+                          <div className="h-full flex flex-col items-center justify-center gap-8">
                              <div className="relative">
                                <motion.div 
-                                animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.2, 0.1] }}
+                                animate={{ scale: [1, 1.5, 1], opacity: [0.1, 0.4, 0.1] }}
                                 transition={{ repeat: Infinity, duration: 2 }}
-                                className="absolute inset-0 bg-brand-primary rounded-full blur-2xl" 
+                                className="absolute inset-0 bg-brand-primary rounded-full blur-3xl" 
                               />
-                              <Activity size={32} className="text-brand-primary animate-pulse relative z-10" />
+                              <Activity size={48} className="text-brand-primary animate-pulse relative z-10" />
                              </div>
-                            <p className="text-xs font-semibold uppercase tracking-widest text-brand-primary animate-pulse">Analyzing...</p>
+                            <p className="text-[10px] font-black uppercase tracking-[0.5em] text-brand-primary animate-shimmer italic">Deconstructing Manuscript Artifact...</p>
                           </div>
                         ) : (
-                          <div className="space-y-3">
-                            <div className="prose prose-sm prose-invert max-w-none text-text-secondary/90 prose-strong:text-text-primary prose-headings:text-brand-primary prose-headings:font-semibold border-b border-border-subtle pb-8">
+                          <div className="space-y-12">
+                            <div className="prose prose-invert prose-brand max-w-none text-text-secondary/80 prose-strong:text-text-primary prose-headings:text-brand-primary prose-headings:font-black prose-p:leading-relaxed border-b border-border-subtle pb-12">
                               <Markdown>{critiqueText}</Markdown>
                             </div>
 
                             {/* Suggestions */}
                             {(project.critiques || {})[selectedChapter.id]?.[0]?.suggestions.length > 0 && (
-                              <div className="space-y-1.5">
-                                <h4 className="text-xs font-semibold text-text-primary uppercase tracking-wider flex items-center gap-2">
-                                  <Flame size={14} className="text-brand-primary" />
-                                  Actionable Suggestions
+                              <div className="space-y-6">
+                                <h4 className="text-[10px] font-black text-text-primary uppercase tracking-[0.3em] flex items-center gap-3">
+                                  <Flame size={16} className="text-brand-primary" />
+                                  Actionable High-Vector Suggestions
                                 </h4>
-                                <div className="space-y-3">
+                                <div className="space-y-4">
                                   {(project.critiques || {})[selectedChapter.id][0].suggestions.map((s: any, idx: number) => (
-                                    <div key={idx} className="flex gap-1.5 text-xs text-text-secondary bg-surface-card p-4 rounded border border-border-subtle group hover:border-brand-primary/40 transition-colors shadow-sm">
-                                      <span className="font-medium text-brand-primary opacity-60 group-hover:opacity-100 transition-opacity">{(idx + 1).toString().padStart(2, '0')}</span>
-                                      <p className="leading-relaxed">{s.text}</p>
+                                    <div key={idx} className="flex gap-4 text-xs text-text-secondary bg-surface-card p-6 rounded-[2rem] border border-border-subtle group hover:border-brand-primary/50 transition-all shadow-xl">
+                                      <span className="font-black text-brand-primary text-base tabular-nums opacity-40 group-hover:opacity-100 transition-opacity">{(idx + 1).toString().padStart(2, '0')}</span>
+                                      <p className="leading-relaxed font-medium">{s.text}</p>
                                     </div>
                                   ))}
                                 </div>
                                 <button 
                                   onClick={applySuggestionsToChapter}
-                                  className="w-full py-2 btn-nexus-primary flex items-center justify-center gap-2 mt-6 active:scale-95"
+                                  className="w-full py-6 bg-brand-primary text-white rounded-[2.5rem] font-black text-[10px] uppercase tracking-[0.3em] hover:bg-brand-accent transition-all shadow-[0_20px_50px_rgba(59,130,246,0.5)] mt-10 flex items-center justify-center gap-3 group active:scale-95"
                                 >
-                                  <Zap size={14} className="text-white fill-current" />
+                                  <Zap size={18} className="text-white group-hover:rotate-12 transition-all fill-current" />
                                   Synthesize Refined Draft
                                 </button>
                               </div>
@@ -1691,19 +1604,21 @@ export default function WritingStudio({
               </div>
             </motion.div>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center p-4 bg-surface-bg relative">
+            <div className="h-full flex flex-col items-center justify-center text-center p-12 bg-surface-bg relative">
+              <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] grayscale pointer-events-none" />
               <div className="relative group">
-                <Library size={80} strokeWidth={1} className="text-text-secondary opacity-20 mb-3 relative z-10" />
+                <div className="absolute inset-0 bg-brand-primary rounded-full blur-[100px] opacity-10 group-hover:opacity-20 transition-opacity" />
+                <Library size={120} strokeWidth={0.5} className="text-text-secondary opacity-10 mb-12 relative z-10" />
               </div>
-              <div className="max-w-md space-y-1.5 relative z-10">
-                <h3 className="text-[11px] font-medium font-medium text-text-primary italic font-serif tracking-tight">No Chapters Selected</h3>
-                <p className="text-[11px] text-text-secondary opacity-80">Add a new chapter sequence to begin drafting.</p>
-                <div className="pt-6">
+              <div className="max-w-md space-y-4 relative z-10">
+                <h3 className="text-3xl font-black text-text-primary italic font-serif tracking-tight">Manuscript Rail Disconnected</h3>
+                <p className="text-xs text-text-secondary font-black uppercase tracking-[0.3em] opacity-40">Initialize a new narrative thread to begin synthesis</p>
+                <div className="pt-10">
                   <button 
                     onClick={addChapter}
-                    className="px-2 py-1 btn-nexus-primary flex items-center justify-center gap-2 mx-auto"
+                    className="px-10 py-5 bg-brand-primary text-white rounded-[2rem] font-black text-[10px] uppercase tracking-[0.3em] hover:bg-brand-accent transition-all shadow-2xl active:scale-95 flex items-center gap-3 mx-auto"
                   >
-                    <Plus size={16} />
+                    <Plus size={18} />
                     New Sequence
                   </button>
                 </div>
@@ -1712,53 +1627,51 @@ export default function WritingStudio({
           )}
         </AnimatePresence>
       </div>
-      )}
 
       {/* Source Viewer Modal */}
       <AnimatePresence>
         {viewingSource && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-8 bg-black/80 backdrop-blur-2xl">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 30 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-surface-bg w-full max-w-4xl h-[80vh] rounded overflow-hidden shadow-2xl flex flex-col border border-border-subtle"
+              className="bg-brand-dark w-full max-w-5xl h-[85vh] rounded-[4rem] overflow-hidden shadow-[0_50px_100px_rgba(0,0,0,0.8)] flex flex-col border border-border-subtle"
             >
-              <div className="p-4 md:p-4 border-b border-border-subtle flex items-center justify-between bg-surface-card">
-                <div className="flex items-center gap-2">
-                  <div className="w-10 h-10 bg-brand-primary/10 text-brand-primary rounded flex items-center justify-center border border-brand-primary/20">
-                    <FileText size={20} />
+              <div className="p-10 border-b border-border-subtle flex items-center justify-between bg-surface-card">
+                <div className="flex items-center gap-6">
+                  <div className="w-14 h-14 bg-brand-primary/10 text-brand-primary rounded-2xl flex items-center justify-center border border-brand-primary/20">
+                    <FileText size={28} />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-text-primary text-[11px] mb-0.5">{viewingSource.name}</h3>
+                    <h3 className="font-black text-text-primary uppercase tracking-[0.3em] text-sm mb-1">{viewingSource.name}</h3>
                     <div className="flex items-center gap-2">
-                       <span className="text-xs text-brand-primary font-medium px-2 py-0.5 bg-brand-primary/10 rounded-md border border-brand-primary/20 tabular-nums">
-                         ID: {viewingSource.id.slice(0, 8)}
+                       <span className="text-[10px] text-brand-primary font-black uppercase tracking-[0.4em] px-3 py-1 bg-brand-primary/10 rounded-md border border-brand-primary/20 tabular-nums">
+                         Secure Access: {viewingSource.id.slice(0, 8)}
                        </span>
                     </div>
                   </div>
                 </div>
                 <button 
                   onClick={() => setViewingSourceId(null)}
-                  className="w-10 h-10 flex items-center justify-center rounded hover:bg-surface-muted text-text-secondary hover:text-text-primary transition-all border border-transparent hover:border-border-subtle active:scale-95"
+                  className="w-14 h-14 flex items-center justify-center rounded-[2rem] hover:bg-white/5 text-text-secondary hover:text-text-primary transition-all border border-border-subtle active:scale-90"
                 >
-                  <X size={20} />
+                  <X size={28} />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 md:p-4 custom-scrollbar bg-surface-bg">
+              <div className="flex-1 overflow-y-auto p-16 custom-scrollbar bg-surface-muted/30">
                 <div className="max-w-[75ch] mx-auto">
-                  <div className="text-text-primary/90 leading-[1.8] font-serif whitespace-pre-wrap text-[11px] font-medium selection:bg-brand-primary/30">
+                  <div className="text-text-primary/90 leading-[2] font-serif whitespace-pre-wrap text-xl md:text-2xl selection:bg-brand-primary/30 first-letter:text-5xl first-letter:font-black first-letter:mr-3 first-letter:float-left">
                     {viewingSource.content}
                   </div>
                 </div>
               </div>
-              <div className="p-4 bg-surface-card border-t border-border-subtle flex justify-end">
+              <div className="p-10 bg-surface-card border-t border-border-subtle flex justify-end">
                 <button 
                   onClick={() => setViewingSourceId(null)}
-                  className="px-2 py-2 btn-nexus-primary rounded flex items-center justify-center gap-2 active:scale-95"
+                  className="px-12 py-5 bg-brand-primary text-white rounded-[2rem] font-black uppercase tracking-[0.3em] text-[10px] hover:bg-brand-accent transition-all shadow-[0_20px_50px_rgba(59,130,246,0.3)] active:scale-95"
                 >
-                  Close
-                  <X size={16} />
+                  Terminate Connection
                 </button>
               </div>
             </motion.div>

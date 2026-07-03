@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { GitBranch, Plus, Zap, Trash2, Map, MoveVertical, AlertCircle, Clock, Activity } from 'lucide-react';
 import { Project, Character, PlotNode, ResearchNote, Chapter, Critique, ProjectType } from '../types';
 import { AIService } from '../services/ai';
-import { Reorder, AnimatePresence, motion, useDragControls } from 'motion/react';
+import { Reorder, AnimatePresence, motion } from 'motion/react';
 import Markdown from 'react-markdown';
 
 interface Props {
@@ -13,7 +13,6 @@ interface Props {
   updateProject: (updates: Partial<Project>) => void;
   updatePlotNodes: (nodes: PlotNode[]) => void;
   updateChapters: (chapters: Chapter[]) => void;
-  setView: (view: any) => void;
   onNotify?: (message: string, type?: 'success' | 'info' | 'error') => void;
   onError?: (message: string) => void;
 }
@@ -29,7 +28,6 @@ interface NodeItemProps {
 function PlotNodeItem({ node, index, totalLength, onUpdate, onDelete }: NodeItemProps) {
   const [localTitle, setLocalTitle] = useState(node.title);
   const [localDesc, setLocalDesc] = useState(node.description);
-  const dragControls = useDragControls();
 
   useEffect(() => {
     setLocalTitle(node.title);
@@ -54,16 +52,14 @@ function PlotNodeItem({ node, index, totalLength, onUpdate, onDelete }: NodeItem
     <Reorder.Item 
       value={node}
       className="relative group"
-      dragListener={false}
-      dragControls={dragControls}
     >
-      <div className="flex gap-1.5 md:gap-1.5 items-start">
+      <div className="flex gap-3 md:gap-12 items-start">
         {/* Visual Connector */}
         <div className="flex flex-col items-center">
-          <div className={`w-10 h-10 md:w-12 md:h-12 rounded flex items-center justify-center text-xs md:text-[11px] font-semibold transition-all shadow-2xl border ${
+          <div className={`w-10 h-10 md:w-12 md:h-12 rounded-2xl flex items-center justify-center text-xs md:text-sm font-black transition-all shadow-2xl border ${
             node.status === 'resolved' ? 'bg-brand-primary/10 border-brand-primary text-brand-primary' : 
             node.status === 'ended' ? 'bg-surface-muted border-border-subtle text-text-secondary opacity-40' :
-            index % 2 === 0 ? 'bg-brand-dark border-border-subtle text-text-primary' : 'btn-nexus-primary border-brand-primary shadow-brand-primary/30'
+            index % 2 === 0 ? 'bg-brand-dark border-border-subtle text-text-primary' : 'bg-brand-primary text-white border-brand-primary shadow-brand-primary/30'
           }`}>
             {(index + 1).toString().padStart(2, '0')}
           </div>
@@ -73,35 +69,35 @@ function PlotNodeItem({ node, index, totalLength, onUpdate, onDelete }: NodeItem
         </div>
 
         {/* Content Card */}
-        <div className="flex-1 p-3 md:p-3 ethereal-panel border border-border-subtle rounded-md hover:border-brand-primary/50 transition-all flex flex-col gap-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.3)] relative group-hover:shadow-[0_30px_70px_rgba(0,0,0,0.5)]">
+        <div className="flex-1 p-6 md:p-10 bg-surface-card border border-border-subtle rounded-[2.5rem] hover:border-brand-primary/50 transition-all flex flex-col gap-6 shadow-[0_20px_50px_rgba(0,0,0,0.3)] relative group-hover:shadow-[0_30px_70px_rgba(0,0,0,0.5)]">
           <div className="flex items-center justify-between">
             <div className="flex-1 flex flex-col gap-2">
               <input 
                 value={localTitle}
                 onChange={(e) => setLocalTitle(e.target.value)}
-                className="bg-transparent border-none focus:ring-0 text-lg md:text-xs font-semibold font-semibold text-text-primary w-full placeholder:text-text-secondary/40 italic font-serif leading-tight"
+                className="bg-transparent border-none focus:ring-0 text-lg md:text-xl font-black text-text-primary w-full placeholder:text-text-secondary/20 italic font-serif leading-tight"
                 placeholder="Plot Event..."
               />
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-2 bg-brand-dark px-3 py-1.5 rounded-md border border-border-subtle" title="The functional role of this beat in your story">
-                  <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-widest opacity-40">Class</span>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                <div className="flex items-center gap-2 bg-brand-dark px-3 py-1.5 rounded-xl border border-border-subtle" title="The functional role of this beat in your story">
+                  <span className="text-[8px] font-black text-text-secondary uppercase tracking-widest opacity-40">Class</span>
                   <select 
                     value={node.type}
                     onChange={(e) => onUpdate(node.id, { type: e.target.value as any })}
-                    className="bg-transparent border-none focus:ring-0 text-[10px] font-semibold uppercase text-brand-primary p-0 cursor-pointer hover:text-brand-accent transition-colors"
+                    className="bg-transparent border-none focus:ring-0 text-[9px] font-black uppercase text-brand-primary p-0 cursor-pointer hover:text-brand-accent transition-colors"
                   >
                     <option value="main">Major Turning Point</option>
                     <option value="sub">Sub-Plot Event</option>
                     <option value="theme">Thematic Reinforcement</option>
                   </select>
                 </div>
-                <div className="w-1 h-1 rounded-full bg-border-subtle" />
-                <div className="flex items-center gap-2 bg-brand-dark px-3 py-1.5 rounded-md border border-border-subtle" title="Current execution status of this beat">
-                  <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-widest opacity-40">Status</span>
+                <div className="hidden sm:block w-1 h-1 rounded-full bg-border-subtle" />
+                <div className="flex items-center gap-2 bg-brand-dark px-3 py-1.5 rounded-xl border border-border-subtle" title="Current execution status of this beat">
+                  <span className="text-[8px] font-black text-text-secondary uppercase tracking-widest opacity-40">Status</span>
                   <select 
                     value={node.status}
                     onChange={(e) => onUpdate(node.id, { status: e.target.value as any })}
-                    className={`bg-transparent border-none focus:ring-0 text-[10px] font-semibold uppercase p-0 cursor-pointer ${
+                    className={`bg-transparent border-none focus:ring-0 text-[9px] font-black uppercase p-0 cursor-pointer ${
                       node.status === 'resolved' ? 'text-brand-primary' :
                       node.status === 'ended' ? 'text-text-secondary' : 'text-amber-500 animate-pulse'
                     }`}
@@ -116,8 +112,7 @@ function PlotNodeItem({ node, index, totalLength, onUpdate, onDelete }: NodeItem
             <div className="flex items-center gap-2">
                <button 
                  title="Drag to re-order the narrative sequence"
-                 onPointerDown={(e) => dragControls.start(e)}
-                 className="p-3 text-text-secondary hover:text-text-primary transition-colors cursor-grab active:cursor-grabbing bg-white/5 rounded-md border border-border-subtle"
+                 className="p-3 text-text-secondary hover:text-text-primary transition-colors cursor-grab active:cursor-grabbing bg-white/5 rounded-xl border border-border-subtle"
                >
                 <MoveVertical size={18} />
               </button>
@@ -128,7 +123,7 @@ function PlotNodeItem({ node, index, totalLength, onUpdate, onDelete }: NodeItem
                     onDelete(node.id);
                   }
                 }}
-                className="p-3 text-text-secondary hover:text-red-500 transition-colors bg-white/5 rounded-md border border-border-subtle group/del"
+                className="p-3 text-text-secondary hover:text-red-500 transition-colors bg-white/5 rounded-xl border border-border-subtle group/del"
               >
                 <Trash2 size={18} className="group-hover/del:scale-110 transition-transform" />
               </button>
@@ -138,7 +133,7 @@ function PlotNodeItem({ node, index, totalLength, onUpdate, onDelete }: NodeItem
             <textarea 
               value={localDesc}
               onChange={(e) => setLocalDesc(e.target.value)}
-              className="w-full bg-brand-dark border border-border-subtle rounded-md p-3 text-text-secondary/80 min-h-[120px] resize-none focus:ring-1 focus:ring-brand-primary/30 focus:border-brand-primary/30 outline-none leading-[1.8] text-[11px] font-medium transition-all"
+              className="w-full bg-brand-dark border border-border-subtle rounded-3xl p-6 text-text-secondary/80 min-h-[120px] resize-none focus:ring-1 focus:ring-brand-primary/30 focus:border-brand-primary/30 outline-none leading-[1.8] text-sm font-medium transition-all"
               placeholder="Document the narrative logic and strategic pivot points for this operation..."
             />
             <div className="absolute right-4 bottom-4 opacity-0 group-focus-within/text:opacity-100 transition-opacity">
@@ -151,7 +146,7 @@ function PlotNodeItem({ node, index, totalLength, onUpdate, onDelete }: NodeItem
   );
 }
 
-export default function PlotArchitect({ project, plotNodes, chapters, research, updateProject, updatePlotNodes, updateChapters, setView, onNotify, onError }: Props) {
+export default function PlotArchitect({ project, plotNodes, chapters, research, updateProject, updatePlotNodes, updateChapters, onNotify, onError }: Props) {
   const [loading, setLoading] = useState(false);
   const [propagating, setPropagating] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -224,7 +219,9 @@ The narrative architecture has been merged with your manuscript.
 - Aligned **${mergedChapters.length} chapters** with the current plot nodes.
 - Preserved **${orphans.length} unexpected segments** at the end of the manuscript to prevent data loss.
 - Re-ordered chapters to match the logical flow of the architecture.
-- Preserved all existing draft content.`);
+- Preserved all existing draft content.
+
+You can now review these changes in the **Writing Studio**.`);
     } catch (err) {
       console.error(err);
       onError?.("Failed to apply the architectural changes.");
@@ -269,25 +266,25 @@ The narrative architecture has been merged with your manuscript.
 
   return (
     <div 
-      className="h-full overflow-y-auto custom-scrollbar px-2 pb-32"
+      className="h-full overflow-y-auto custom-scrollbar px-4 pb-32"
       style={{ minHeight: 0 }}
     >
-      <div className="max-w-7xl mx-auto py-3 md:py-1 md:px-2 flex flex-col gap-1.5">
-      <header className="flex flex-col md:flex-row items-center justify-between gap-1.5 md:gap-2 ethereal-panel p-3 md:p-3 rounded-md md:rounded-md border border-border-subtle shadow-[0_50px_100px_rgba(0,0,0,0.4)] relative overflow-hidden group">
+      <div className="max-w-7xl mx-auto py-6 md:py-12 md:px-2 flex flex-col gap-10">
+      <header className="flex flex-col md:flex-row items-center justify-between gap-8 bg-surface-card p-10 rounded-[3.5rem] border border-border-subtle shadow-[0_50px_100px_rgba(0,0,0,0.4)] relative overflow-hidden group">
         <div className="absolute inset-0 bg-brand-primary opacity-0 group-hover:opacity-[0.02] transition-opacity duration-1000" />
         <div className="text-center md:text-left relative z-10">
-          <div className="flex items-center gap-1.5 mb-2 justify-center md:justify-start">
-             <div className="w-2 h-2 rounded-full bg-brand-primary shadow-[0_0_10px_rgba(168,85,247,0.6)] animate-pulse" />
-             <h2 className="text-xs font-semibold md:text-[11px] font-semibold font-semibold tracking-tight text-text-primary italic font-serif">Strategic Operations Map</h2>
+          <div className="flex items-center gap-3 mb-2 justify-center md:justify-start">
+             <div className="w-2 h-2 rounded-full bg-brand-primary shadow-[0_0_10px_rgba(59,130,246,0.6)] animate-pulse" />
+             <h2 className="text-2xl md:text-4xl font-black tracking-tight text-text-primary italic font-serif">Strategic Operations Map</h2>
           </div>
-          <p className="text-[10px] md:text-xs text-text-secondary font-semibold uppercase tracking-widest opacity-40">Mapping structural narrative vectors for synchronized deployment</p>
+          <p className="text-[10px] md:text-[11px] text-text-secondary font-black uppercase tracking-[0.5em] opacity-40">Mapping structural narrative vectors for synchronized deployment</p>
         </div>
-        <div className="flex flex-wrap gap-1.5 md:gap-1.5 justify-center w-full md:w-auto relative z-10">
+        <div className="flex flex-wrap gap-3 md:gap-6 justify-center w-full md:w-auto relative z-10">
           <button 
             onClick={handlePropagate}
             disabled={propagating || plotNodes.length === 0}
             title="Automatically update your manuscript chapters to align with these plot nodes"
-            className="px-2 py-1 btn-nexus-primary font-semibold rounded text-xs transition-all shadow-2xl shadow-brand-primary/20 flex items-center justify-center gap-1.5 disabled:opacity-30 uppercase tracking-widest active:scale-95 group/btn"
+            className="px-8 py-4 bg-brand-primary text-white font-black rounded-2xl text-[10px] transition-all shadow-2xl shadow-brand-primary/20 flex items-center gap-3 disabled:opacity-30 uppercase tracking-widest active:scale-95 group/btn"
           >
             {propagating ? (
               <Activity size={14} className="animate-spin" />
@@ -298,7 +295,7 @@ The narrative architecture has been merged with your manuscript.
             onClick={handleAnalyze}
             disabled={analyzing || plotNodes.length === 0}
             title="AI analysis of your story's continuity and logic"
-            className="px-2 py-1 bg-brand-dark text-text-primary font-semibold rounded text-xs transition-all border border-border-subtle hover:border-brand-primary/50 flex items-center justify-center gap-1.5 disabled:opacity-30 uppercase tracking-widest active:scale-95 group/btn shadow-xl"
+            className="px-8 py-4 bg-brand-dark text-text-primary font-black rounded-2xl text-[10px] transition-all border border-border-subtle hover:border-brand-primary/50 flex items-center gap-3 disabled:opacity-30 uppercase tracking-widest active:scale-95 group/btn shadow-xl"
           >
             {analyzing ? (
               <Activity size={14} className="animate-spin" />
@@ -309,7 +306,7 @@ The narrative architecture has been merged with your manuscript.
             onClick={handleGenerateNodes}
             disabled={loading}
             title="Let AI brainstorm a sequence of plot beats based on your premise"
-            className="px-2 py-1 bg-brand-primary/10 border border-brand-primary/30 text-brand-primary font-semibold rounded text-xs transition-all hover:bg-brand-primary/20 flex items-center justify-center gap-1.5 disabled:opacity-30 uppercase tracking-widest active:scale-95 group/btn"
+            className="px-8 py-4 bg-brand-primary/10 border border-brand-primary/30 text-brand-primary font-black rounded-2xl text-[10px] transition-all hover:bg-brand-primary/20 flex items-center gap-3 disabled:opacity-30 uppercase tracking-widest active:scale-95 group/btn"
           >
             {loading ? (
               <Activity size={14} className="animate-spin" />
@@ -319,7 +316,7 @@ The narrative architecture has been merged with your manuscript.
           <button 
             onClick={addNode}
             title="Add a manual narrative beat to the end"
-            className="px-2 py-1 bg-surface-muted text-text-secondary font-semibold border border-border-subtle rounded text-xs transition-all hover:text-text-primary hover:border-text-secondary/30 flex items-center justify-center gap-1.5 uppercase tracking-widest active:scale-95"
+            className="px-8 py-4 bg-surface-muted text-text-secondary font-black border border-border-subtle rounded-2xl text-[10px] transition-all hover:text-text-primary hover:border-text-secondary/30 flex items-center gap-3 uppercase tracking-widest active:scale-95"
           >
             <Plus size={14} />
             Add Beat
@@ -327,13 +324,13 @@ The narrative architecture has been merged with your manuscript.
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-1.5 pb-12">
-        <div className="lg:col-span-2 px-2.5 -mx-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 pb-12">
+        <div className="lg:col-span-2 px-6 -mx-6">
           <Reorder.Group 
             axis="y" 
             values={plotNodes} 
             onReorder={(newOrder) => updatePlotNodes(newOrder.map((p, i) => ({ ...p, order: i })))}
-            className="space-y-1.5 max-w-4xl mx-auto pb-24"
+            className="space-y-12 max-w-4xl mx-auto pb-24"
           >
             {plotNodes.map((node, index) => (
               <PlotNodeItem 
@@ -347,12 +344,12 @@ The narrative architecture has been merged with your manuscript.
             ))}
 
             {plotNodes.length === 0 && (
-              <div className="h-[500px] flex flex-col items-center justify-center text-center p-20 ethereal-panel border border-dashed border-border-subtle rounded-[5rem] shadow-inner relative group overflow-hidden">
+              <div className="h-[500px] flex flex-col items-center justify-center text-center p-20 bg-surface-card border border-dashed border-border-subtle rounded-[5rem] shadow-inner relative group overflow-hidden">
                 <div className="absolute inset-0 bg-brand-primary rounded-full blur-[150px] opacity-5 group-hover:opacity-10 transition-opacity duration-1000" />
-                <Map size={100} strokeWidth={0.5} className="text-text-secondary opacity-10 mb-3 relative z-10" />
-                <div className="space-y-1.5 relative z-10 max-w-sm">
-                  <p className="text-[11px] font-semibold font-semibold text-text-primary italic font-serif tracking-tight">Structural Grid Offline</p>
-                  <p className="text-xs text-text-secondary font-semibold uppercase tracking-widest opacity-40 leading-relaxed mx-auto max-w-[240px]">Initialize neural synthesis to populate the primary narrative skeletal architecture.</p>
+                <Map size={100} strokeWidth={0.5} className="text-text-secondary opacity-10 mb-8 relative z-10" />
+                <div className="space-y-4 relative z-10 max-w-sm">
+                  <p className="text-2xl font-black text-text-primary italic font-serif tracking-tight">Structural Grid Offline</p>
+                  <p className="text-[10px] text-text-secondary font-black uppercase tracking-[0.4em] opacity-40 leading-relaxed mx-auto max-w-[240px]">Initialize neural synthesis to populate the primary narrative skeletal architecture.</p>
                 </div>
               </div>
             )}
@@ -360,51 +357,42 @@ The narrative architecture has been merged with your manuscript.
         </div>
 
         {/* Continuity Sidebar */}
-        <div className="bg-brand-dark border border-border-subtle rounded flex flex-col overflow-hidden shadow-[0_50px_100px_rgba(0,0,0,0.5)] relative group">
-          <div className="absolute top-0 right-0 p-2 opacity-[0.02] pointer-events-none group-hover:opacity-[0.05] transition-opacity duration-1000">
+        <div className="bg-brand-dark border border-border-subtle rounded-[4rem] flex flex-col overflow-hidden shadow-[0_50px_100px_rgba(0,0,0,0.5)] relative group">
+          <div className="absolute top-0 right-0 p-8 opacity-[0.02] pointer-events-none group-hover:opacity-[0.05] transition-opacity duration-1000">
              <AlertCircle size={200} />
           </div>
-          <div className="p-3 border-b border-border-subtle flex items-center justify-between ethereal-panel relative z-10">
+          <div className="p-10 border-b border-border-subtle flex items-center justify-between bg-surface-card relative z-10">
             <div className="flex flex-col">
-              <h3 className="text-xs font-semibold text-brand-primary flex items-center gap-1.5 uppercase tracking-widest mb-1 font-sans">
-                <div className="w-1.5 h-1.5 rounded-full bg-brand-primary animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.5)]" />
+              <h3 className="text-[10px] font-black text-brand-primary flex items-center gap-3 uppercase tracking-[0.4em] mb-1 font-sans">
+                <div className="w-1.5 h-1.5 rounded-full bg-brand-primary animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
                 Dissonance Audit
               </h3>
-              <span className="text-[10px] font-semibold text-text-secondary opacity-40 uppercase tracking-[0.2em]">Cross-Vector Continuity Report</span>
+              <span className="text-[8px] font-black text-text-secondary opacity-40 uppercase tracking-[0.2em]">Cross-Vector Continuity Report</span>
             </div>
             <button 
               onClick={() => setContinuityReport(null)}
-              className="p-3 text-text-secondary hover:text-brand-primary transition-colors bg-surface-muted rounded-md border border-border-subtle active:scale-95 shadow-lg"
+              className="p-3 text-text-secondary hover:text-brand-primary transition-colors bg-surface-muted rounded-xl border border-border-subtle active:scale-95 shadow-lg"
             >
               <Trash2 size={16} />
             </button>
           </div>
-          <div className="flex-1 p-3 relative z-10">
+          <div className="flex-1 p-12 relative z-10">
             <AnimatePresence mode="wait">
               {continuityReport ? (
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="space-y-1.5"
+                  className="space-y-12"
                 >
-                  <div className="prose prose-invert prose-brand prose-sm max-w-none prose-p:leading-relaxed prose-headings:text-brand-primary prose-headings:font-semibold italic text-text-secondary/80 font-serif">
+                  <div className="prose prose-invert prose-brand prose-sm max-w-none prose-p:leading-relaxed prose-headings:text-brand-primary prose-headings:font-black italic text-text-secondary/80 font-serif">
                     <Markdown>{continuityReport}</Markdown>
                   </div>
                   
-                  {continuityReport.includes('Synchronization Success') && (
-                    <button 
-                      onClick={() => setView('autodraft')}
-                      className="w-full py-3 btn-nexus-primary font-semibold rounded-md text-xs transition-all shadow-2xl shadow-brand-primary/20 flex items-center justify-center gap-2 uppercase tracking-wider active:scale-95 group/btn"
-                    >
-                      <Zap size={18} className="fill-current group-hover/btn:rotate-12 transition-transform" />
-                      Initialize Neural Drafting Hub
-                    </button>
-                  )}
                   {!continuityReport.includes('Synchronization Success') && (
                     <button 
                       onClick={handlePropagate}
                       disabled={propagating}
-                      className="w-full py-3 btn-nexus-primary font-semibold rounded-md text-xs transition-all shadow-2xl shadow-brand-primary/20 flex items-center justify-center gap-2 uppercase tracking-wider active:scale-95 group/btn"
+                      className="w-full py-8 bg-brand-primary text-white font-black rounded-[2.5rem] text-[10px] transition-all shadow-2xl shadow-brand-primary/20 flex items-center justify-center gap-4 uppercase tracking-[0.3em] active:scale-95 group/btn"
                     >
                       {propagating ? (
                         <Activity size={18} className="animate-spin" />
@@ -414,25 +402,25 @@ The narrative architecture has been merged with your manuscript.
                   )}
                 </motion.div>
               ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center gap-1.5">
+                <div className="h-full flex flex-col items-center justify-center text-center gap-10">
                   {analyzing ? (
-                     <div className="flex flex-col items-center gap-1.5">
+                     <div className="flex flex-col items-center gap-8">
                         <div className="relative">
                           <motion.div 
                             animate={{ scale: [1, 1.5, 1], opacity: [0.1, 0.3, 0.1] }}
                             transition={{ repeat: Infinity, duration: 2.5 }}
                             className="absolute inset-0 bg-brand-primary rounded-full blur-3xl" 
                           />
-                          <div className="relative z-10 p-3 bg-brand-primary/10 rounded-full border border-brand-primary/20 shadow-inner">
+                          <div className="relative z-10 p-6 bg-brand-primary/10 rounded-full border border-brand-primary/20 shadow-inner">
                             <Activity size={48} className="text-brand-primary animate-pulse" />
                           </div>
                         </div>
-                        <p className="text-xs font-semibold uppercase tracking-widest text-brand-primary animate-shimmer italic">Synchronizing Narrative Vectors...</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.5em] text-brand-primary animate-shimmer italic">Synchronizing Narrative Vectors...</p>
                      </div>
                   ) : (
-                    <div className="opacity-20 flex flex-col items-center gap-2 group-hover:opacity-30 transition-opacity duration-1000">
+                    <div className="opacity-20 flex flex-col items-center gap-8 group-hover:opacity-30 transition-opacity duration-1000">
                       <Clock size={80} strokeWidth={0.5} className="text-text-secondary" />
-                      <p className="text-xs font-semibold uppercase tracking-widest text-text-secondary max-w-[200px] leading-relaxed mx-auto">Awaiting High-Vector Operational Signal</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.4em] text-text-secondary max-w-[200px] leading-relaxed mx-auto">Awaiting High-Vector Operational Signal</p>
                     </div>
                   )}
                 </div>
